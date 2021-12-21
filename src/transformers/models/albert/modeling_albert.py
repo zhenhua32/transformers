@@ -784,13 +784,13 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        sentence_order_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
-            (see `input_ids` docstring) Indices should be in `[0, 1]`. `0` indicates original order (sequence
-            A, then sequence B), `1` indicates switched order (sequence B, then sequence A).
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            sentence_order_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
+                (see `input_ids` docstring) Indices should be in `[0, 1]`. `0` indicates original order (sequence
+                A, then sequence B), `1` indicates switched order (sequence B, then sequence A).
 
         Returns:
 

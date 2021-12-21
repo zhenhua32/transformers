@@ -1421,12 +1421,12 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
-            (see `input_ids` docstring). Indices should be in `[0, 1]`:
+            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
+                (see `input_ids` docstring). Indices should be in `[0, 1]`:
 
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
+                - 0 indicates sequence B is a continuation of sequence A,
+                - 1 indicates sequence B is a random sequence.
 
         Returns:
 
