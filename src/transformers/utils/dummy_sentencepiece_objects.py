@@ -2,6 +2,10 @@
 # flake8: noqa
 from ..utils import DummyObject, requires_backends
 
+"""
+有点意思, 就是直接把所有的类都重新定义一遍.
+"""
+
 
 class AlbertTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]

@@ -2452,6 +2452,7 @@ else:
     ]
 
 
+# 这是小天才做法, 当不运行的时候 TYPE_CHECKING 会是 True, 用于第三方的代码检查. 当在 runtime 时会是 False, 可以延迟加载模块
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -4457,6 +4458,7 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    # 懒加载模块
     sys.modules[__name__] = _LazyModule(
         __name__,
         globals()["__file__"],
@@ -4466,6 +4468,7 @@ else:
     )
 
 
+# 必须要有一个 AI 框架可用
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
     logger.warning(
         "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
