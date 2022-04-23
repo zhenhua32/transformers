@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+# 说明
+
+read 分支是用来读代码的.
+
 <p align="center">
     <br>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
