@@ -3,6 +3,9 @@ from typing import List, Optional
 
 
 class Constraint(ABC):
+    """
+    一个定义约束的类别
+    """
     r"""Abstract base class for all constraints that can be applied during generation.
     It must define how the constraint can be satisfied.
 

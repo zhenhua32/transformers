@@ -14,6 +14,7 @@
 # limitations under the License.
 """
  Sequence feature extraction class for common feature extractors to preprocess sequences.
+序列特征提取类
 """
 from typing import Dict, List, Optional, Union
 

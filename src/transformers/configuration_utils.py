@@ -238,16 +238,19 @@ class PretrainedConfig(PushToHubMixin):
             Whether or not the model should use BFloat16 scalars (only used by some TensorFlow models).
     """
     model_type: str = ""
+    # 是否是组合
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
+        # 如果在父类中, 那么 key 就要更新为父类的 attribute_map 属性中的 key
         if key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
         super().__setattr__(key, value)
 
     def __getattribute__(self, key):
+        # 如果 key 不是 attribute_map 且在父类的 attribute_map 中, 那么就将 key 更新为父类的 attribute_map 属性中的 key
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
         return super().__getattribute__(key)
@@ -265,6 +268,7 @@ class PretrainedConfig(PushToHubMixin):
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
+        # differentiate 是区分的意思
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
@@ -298,6 +302,7 @@ class PretrainedConfig(PushToHubMixin):
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
 
+        # 微调任务的参数
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
         self.finetuning_task = kwargs.pop("finetuning_task", None)
@@ -310,11 +315,13 @@ class PretrainedConfig(PushToHubMixin):
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
                 )
+            # 将 key 转换成 int 类型
             self.id2label = dict((int(key), value) for key, value in self.id2label.items())
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
 
+        # 如果现在还是字符串, 那么就转换成 torch 的 dtype 类型
         if self.torch_dtype is not None and isinstance(self.torch_dtype, str):
             # we will start using self.torch_dtype in v5, but to be consistent with
             # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
@@ -323,6 +330,7 @@ class PretrainedConfig(PushToHubMixin):
 
                 self.torch_dtype = getattr(torch, self.torch_dtype)
 
+        # tokenizer 和 模型应该有一样的参数
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
@@ -336,8 +344,10 @@ class PretrainedConfig(PushToHubMixin):
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
+        # 回归和 多标签 分类
         # regression / multi-label classification
         self.problem_type = kwargs.pop("problem_type", None)
+        # 问题类型有这样三种, 回归, 单标签分类, 多标签分类
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
@@ -352,6 +362,7 @@ class PretrainedConfig(PushToHubMixin):
                 "safely remove it from your `config.json` file."
             )
 
+        # 预训练检查点的名字或路径
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
 
@@ -386,6 +397,7 @@ class PretrainedConfig(PushToHubMixin):
     def use_return_dict(self) -> bool:
         """
         `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
+        是否返回 [`~utils.ModelOutput`] 而不是元组
         """
         # If torchscript is set, force `return_dict=False` to avoid jit errors
         return self.return_dict and not self.torchscript
@@ -395,10 +407,12 @@ class PretrainedConfig(PushToHubMixin):
         """
         `int`: The number of labels for classification models.
         """
+        # 实际上用了 id2label, 而不是设置的 num_labels 属性
         return len(self.id2label)
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
+        # 如果没有 id2label 或者长度不一致, 就直接更新, 用的是固定结构的 label 名字, 从 0 开始的 LABEL_0
         if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
@@ -442,6 +456,7 @@ class PretrainedConfig(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
+        # 保存配置文件
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
 
@@ -524,6 +539,7 @@ class PretrainedConfig(PushToHubMixin):
         assert unused_kwargs == {"foo": False}
         ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        # model_type 冲突时提示
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
@@ -552,8 +568,10 @@ class PretrainedConfig(PushToHubMixin):
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
 
+        # 如果还有别的配置文件, 合并
         # That config file may point us toward another config file to use.
         if "configuration_files" in config_dict:
+            # 获取配置文件的名字
             configuration_file = get_configuration_file(config_dict["configuration_files"])
             config_dict, kwargs = cls._get_config_dict(
                 pretrained_model_name_or_path, _configuration_file=configuration_file, **original_kwargs
@@ -579,14 +597,17 @@ class PretrainedConfig(PushToHubMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
+        # 是否是离线模式
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        # 如果是文件名或者远程路径就直接用
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
+            # 获取配置文件的名字
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
             if os.path.isdir(pretrained_model_name_or_path):
@@ -677,11 +698,14 @@ class PretrainedConfig(PushToHubMixin):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
+        # 初始化自己
         config = cls(**config_dict)
 
+        # 修剪头
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
 
+        # 又是这个可能不一致的问题
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:
             num_labels = kwargs["num_labels"]
@@ -692,6 +716,7 @@ class PretrainedConfig(PushToHubMixin):
                     f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
                     "one of them."
                 )
+        # 找到那些在 config 中的 key, 将它们作为自己的属性, 然后从 kwargs 中删除掉
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
@@ -701,6 +726,7 @@ class PretrainedConfig(PushToHubMixin):
         for key in to_remove:
             kwargs.pop(key, None)
 
+        # 是否需要返回剩余的未使用的 kwargs
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
             return config, kwargs
@@ -739,6 +765,7 @@ class PretrainedConfig(PushToHubMixin):
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
+        移除和默认值相同的key, 这样会更便于阅读
 
         Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -895,6 +922,7 @@ class PretrainedConfig(PushToHubMixin):
             auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
                 The auto class to register this new configuration with.
         """
+        # 自动类的名字
         if not isinstance(auto_class, str):
             auto_class = auto_class.__name__
 
@@ -918,6 +946,7 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
+        # re.compile(r"config\.(.*)\.json"), 那中间的应该是版本号
         search = _re_configuration_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
@@ -927,10 +956,12 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     # Defaults to FULL_CONFIGURATION_FILE and then try to look at some newer versions.
     configuration_file = CONFIG_NAME
     transformers_version = version.parse(__version__)
+    # 找到一个小于等于当前版本号的最新的配置文件
     for v in available_versions:
         if version.parse(v) <= transformers_version:
             configuration_file = configuration_files_map[v]
         else:
+            # 因为是从小排到大, 所以后面的都是大于当前版本号的, 就无需继续了
             # No point going further since the versions are sorted.
             break
 

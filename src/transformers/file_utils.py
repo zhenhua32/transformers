@@ -23,6 +23,7 @@ This module should not be update anymore and is only left for backward compatibi
 
 from . import __version__
 
+# 用于向后兼容的, 应该是后来拆分为 utils 目录了
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
 from .utils import (
     CLOUDFRONT_DISTRIB_PREFIX,

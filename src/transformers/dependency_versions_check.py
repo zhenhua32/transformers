@@ -22,7 +22,9 @@ from .utils.versions import require_version, require_version_core
 #
 # order specific notes:
 # - tqdm must be checked before tokenizers
+# 运行时的依赖检查
 
+# 定义需要检查的包和顺序
 pkgs_to_check_at_runtime = "python tqdm regex sacremoses requests packaging filelock numpy tokenizers".split()
 if sys.version_info < (3, 7):
     pkgs_to_check_at_runtime.append("dataclasses")
@@ -31,6 +33,7 @@ if sys.version_info < (3, 8):
 
 for pkg in pkgs_to_check_at_runtime:
     if pkg in deps:
+        # 特殊情况
         if pkg == "tokenizers":
             # must be loaded here, or else tqdm check may fail
             from .utils import is_tokenizers_available
@@ -38,6 +41,7 @@ for pkg in pkgs_to_check_at_runtime:
             if not is_tokenizers_available():
                 continue  # not required, check version only if installed
 
+        # 检查依赖是否满足
         require_version_core(deps[pkg])
     else:
         raise ValueError(f"can't find {pkg} in {deps.keys()}, check dependency_versions_table.py")
