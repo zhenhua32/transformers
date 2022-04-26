@@ -546,6 +546,7 @@ class PretrainedConfig(PushToHubMixin):
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
+        # 核心还是这个, 前面只不过是从配置文件中读取了 config_dict
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
@@ -667,6 +668,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         try:
+            # 主要是这行代码, 从 json 文件中读取配置
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -701,7 +703,7 @@ class PretrainedConfig(PushToHubMixin):
         # 初始化自己
         config = cls(**config_dict)
 
-        # 修剪头
+        # 修剪头, 其实只是将 key 变成 int 类型
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
 

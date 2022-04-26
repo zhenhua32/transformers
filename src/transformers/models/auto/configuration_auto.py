@@ -563,6 +563,8 @@ class AutoConfig:
     when created with the [`~AutoConfig.from_pretrained`] class method.
 
     This class cannot be instantiated directly using `__init__()` (throws an error).
+
+    这个类不能直接被实例化, 应该通过类方法 AutoConfig.from_pretrained 调用
     """
 
     def __init__(self):
@@ -573,8 +575,10 @@ class AutoConfig:
 
     @classmethod
     def for_model(cls, model_type: str, *args, **kwargs):
+        # model_type 必须被注册在 CONFIG_MAPPING 中
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
+            # 然后调用这个配置类方法
             return config_class(*args, **kwargs)
         raise ValueError(
             f"Unrecognized model identifier: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
@@ -665,11 +669,14 @@ class AutoConfig:
         >>> config.unused_kwargs
         {'foo': False}
         ```"""
+        # 特殊标识, 表示是从 AutoConfig 来的
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", False)
+        # 获取预训练的配置, 第二个参数是剩余的 kwargs, 这里不需要就说明是无关的配置参数
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
+            # 先尝试从 ["auto_map"]["AutoConfig"] 中读取
             if not trust_remote_code:
                 raise ValueError(
                     f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
@@ -681,13 +688,16 @@ class AutoConfig:
                     "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
                     "ensure no malicious code has been contributed in a newer revision."
                 )
+            # 类引用, 是用 . 分隔的字符串, 左边是模块名, 右边是类名
             class_ref = config_dict["auto_map"]["AutoConfig"]
             module_file, class_name = class_ref.split(".")
+            # 动态加载类
             config_class = get_class_from_dynamic_module(
                 pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
             )
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
+            # 如果不行, 则尝试从 model_type 中获取类
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             return config_class.from_dict(config_dict, **kwargs)
         else:
@@ -711,6 +721,7 @@ class AutoConfig:
             model_type (`str`): The model type like "bert" or "gpt".
             config ([`PretrainedConfig`]): The config to register.
         """
+        # 需要确保 config.model_type 和传入的 model_type 一致
         if issubclass(config, PretrainedConfig) and config.model_type != model_type:
             raise ValueError(
                 "The config you are passing has a `model_type` attribute that is not consistent with the model type "

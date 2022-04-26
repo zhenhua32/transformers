@@ -45,6 +45,7 @@ def init_hf_modules():
     if HF_MODULES_CACHE in sys.path:
         return
 
+    # 主要就是将 HF_MODULES_CACHE 添加到 sys.path 中, 然后创建目录并添加 __init__.py 文件
     sys.path.append(HF_MODULES_CACHE)
     os.makedirs(HF_MODULES_CACHE, exist_ok=True)
     init_path = Path(HF_MODULES_CACHE) / "__init__.py"
@@ -59,8 +60,10 @@ def create_dynamic_module(name: Union[str, os.PathLike]):
     init_hf_modules()
     dynamic_module_path = Path(HF_MODULES_CACHE) / name
     # If the parent module does not exist yet, recursively create it.
+    # 递归创建
     if not dynamic_module_path.parent.exists():
         create_dynamic_module(dynamic_module_path.parent)
+    # 实际上就是创建目录, 并添加 __init__.py 文件
     os.makedirs(dynamic_module_path, exist_ok=True)
     init_path = dynamic_module_path / "__init__.py"
     if not init_path.exists():
@@ -150,8 +153,10 @@ def get_class_in_module(class_name, module_path):
     """
     Import a module on the cache directory for modules and extract a class from it.
     """
+    # 将 / 替换成 ., 然后加载模块
     module_path = module_path.replace(os.path.sep, ".")
     module = importlib.import_module(module_path)
+    # 最后获取类名
     return getattr(module, class_name)
 
 
@@ -212,22 +217,26 @@ def get_cached_module_file(
     Returns:
         `str`: The path to the module inside the cache.
     """
+    # 如果是离线模式, 就强行使用本地文件
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
 
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+    # 如果是目录名, 就加上 module_file, 拼成完整的文件路径
     if os.path.isdir(pretrained_model_name_or_path):
         module_file_or_url = os.path.join(pretrained_model_name_or_path, module_file)
         submodule = "local"
     else:
+        # 否则就是从 hf 中下载
         module_file_or_url = hf_bucket_url(
             pretrained_model_name_or_path, filename=module_file, revision=revision, mirror=None
         )
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
 
     try:
+        # 解析后的模块文件
         # Load from URL or cache if already cached
         resolved_module_file = cached_path(
             module_file_or_url,
@@ -243,6 +252,7 @@ def get_cached_module_file(
         logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
 
+    # 获取依赖的模块
     # Check we have all the requirements in our environment
     modules_needed = check_imports(resolved_module_file)
 
@@ -255,6 +265,7 @@ def get_cached_module_file(
         # that hash, to only copy when there is a modification but it seems overkill for now).
         # The only reason we do the copy is to avoid putting too many folders in sys.path.
         shutil.copy(resolved_module_file, submodule_path / module_file)
+        # 将依赖的模块也复制过去
         for module_needed in modules_needed:
             module_needed = f"{module_needed}.py"
             shutil.copy(os.path.join(pretrained_model_name_or_path, module_needed), submodule_path / module_needed)
@@ -268,6 +279,7 @@ def get_cached_module_file(
         else:
             token = None
 
+        # 这里应该是做了 commit, 没有细看
         commit_hash = model_info(pretrained_model_name_or_path, revision=revision, token=token).sha
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
@@ -281,6 +293,7 @@ def get_cached_module_file(
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
             if not (submodule_path / module_needed).exists():
+                # 也是递归调用
                 get_cached_module_file(
                     pretrained_model_name_or_path,
                     f"{module_needed}.py",
@@ -292,6 +305,7 @@ def get_cached_module_file(
                     revision=revision,
                     local_files_only=local_files_only,
                 )
+    # 最后返回模块的完整路径
     return os.path.join(full_submodule, module_file)
 
 
