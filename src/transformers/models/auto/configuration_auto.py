@@ -26,6 +26,7 @@ from ...utils import CONFIG_NAME, logging
 
 logger = logging.get_logger(__name__)
 
+# key 是 model_type, value 是配置类的字符串名字
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
@@ -386,25 +387,35 @@ def config_class_to_model_type(config):
 class _LazyConfigMapping(OrderedDict):
     """
     A dictionary that lazily load its values when they are requested.
+    一个有序字典类的子类
     """
 
     def __init__(self, mapping):
+        # _mapping 就是其存储的内容
         self._mapping = mapping
         self._extra_content = {}
+        # 保存已经加载的模型
         self._modules = {}
 
     def __getitem__(self, key):
+        # 优先从 _extra_content 中获取
         if key in self._extra_content:
             return self._extra_content[key]
+        # 如果没有, 必须假设在 _mapping 中一定存在
         if key not in self._mapping:
             raise KeyError(key)
+        # 获取类的字符串, value 是配置类的名字
         value = self._mapping[key]
+        # 将 key 转换成模块名字
         module_name = model_type_to_module_name(key)
         if module_name not in self._modules:
+            # 第二个参数是用于相对导入的, 所以是固定的, 因为所有的模块都在这个目录下
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
+        # 从模块中获取配置类
         if hasattr(self._modules[module_name], value):
             return getattr(self._modules[module_name], value)
 
+        # 如果到这时还没能获取配置类, 就从 transformers 中获取
         # Some of the mappings have entries model_type -> config of another model type. In that case we try to grab the
         # object at the top level.
         transformers_module = importlib.import_module("transformers")
@@ -431,6 +442,7 @@ class _LazyConfigMapping(OrderedDict):
         """
         if key in self._mapping.keys():
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        # 原来不是原生的, 会被保存在 _extra_content 中
         self._extra_content[key] = value
 
 
