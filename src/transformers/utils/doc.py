@@ -51,6 +51,7 @@ def add_start_docstrings_to_model_forward(*docstr):
 
 
 def add_end_docstrings(*docstr):
+    """拼接文档字符串"""
     def docstring_decorator(fn):
         fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docstr)
         return fn

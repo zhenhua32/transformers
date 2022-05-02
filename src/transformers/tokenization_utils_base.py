@@ -59,6 +59,7 @@ from .utils import (
 from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 
+# 当使用类型检测时, 导入这些库, 用于IDE
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -68,16 +69,18 @@ if TYPE_CHECKING:
         import jax.numpy as jnp  # noqa: F401
 
 
+# 如果有 tokenizers 这个库, 就直接导入使用
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
 else:
-
+    # 没有的话, 就自己定义, 可能是不完全的实现, 比如 EncodingFast 就是一个假的类(dummy class)
     @dataclass(frozen=True, eq=True)
     class AddedToken:
         """
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
+        表示一个被添加到 Tokenizer 的 token, 可能会有一些特殊的属性来表示应该有什么样的行为
         """
 
         content: str = field(default_factory=str)
@@ -750,10 +753,12 @@ class BatchEncoding(UserDict):
 
 class SpecialTokensMixin:
     """
+    特殊 token 的类, 保存着这些特殊的 token.
+
     A mixin derived by [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] to handle specific behaviors related to
     special tokens. In particular, this class hold the attributes which can be used to directly access these special
     tokens in a model-independent manner and allow to set and update the special tokens.
-
+    manner 是方式或风格的意思.
     Args:
         bos_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing the beginning of a sentence.
@@ -801,12 +806,15 @@ class SpecialTokensMixin:
         # We directly set the hidden value to allow initialization with special tokens
         # which are not yet in the vocabulary. Necessary for serialization/de-serialization
         # TODO clean this up at some point (probably by switching to fast tokenizers)
+        # 对于其他的关键词参数, 当 key 在 SPECIAL_TOKENS_ATTRIBUTES 时, 就直接设置为属性
         for key, value in kwargs.items():
             if value is None:
                 continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
+                    # 需要确保类型为列表或元组
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
+                    # 限定了列表或元组中每个项的类型
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
@@ -818,6 +826,7 @@ class SpecialTokensMixin:
 
     def sanitize_special_tokens(self) -> int:
         """
+        净化特殊 token. 确保这些 token 都在词汇表中.
         Make sure that all the special tokens attributes of the tokenizer (`tokenizer.mask_token`,
         `tokenizer.cls_token`, etc.) are in the vocabulary.
 
@@ -876,23 +885,30 @@ class SpecialTokensMixin:
 
         assert tokenizer.cls_token == "<CLS>"
         ```"""
+        # 空的就跳过, 返回计数为 0
         if not special_tokens_dict:
             return 0
 
         added_tokens = 0
         for key, value in special_tokens_dict.items():
+            # 要求 key 在 SPECIAL_TOKENS_ATTRIBUTES 中
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
+            # verbose 会记录这个添加的过程
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
+            # 居然是直接将 key 添加为属性
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
+                # 又判断了一遍类型
                 assert isinstance(value, (list, tuple)) and all(
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
+                # 实际操作, 添加一个 token
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
+                # 判断类型
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
@@ -942,17 +958,22 @@ class SpecialTokensMixin:
         if not new_tokens:
             return 0
 
+        # 转换成数组
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
 
         return self._add_tokens(new_tokens, special_tokens=special_tokens)
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        """
+        原来这才是核心, 还没实现呢
+        """
         raise NotImplementedError
 
     @property
     def bos_token(self) -> str:
         """
+        句子的开头
         `str`: Beginning of sentence token. Log an error if used while not having been set.
         """
         if self._bos_token is None and self.verbose:
@@ -963,6 +984,7 @@ class SpecialTokensMixin:
     @property
     def eos_token(self) -> str:
         """
+        句子的结尾
         `str`: End of sentence token. Log an error if used while not having been set.
         """
         if self._eos_token is None and self.verbose:
@@ -973,6 +995,7 @@ class SpecialTokensMixin:
     @property
     def unk_token(self) -> str:
         """
+        未知的 token
         `str`: Unknown token. Log an error if used while not having been set.
         """
         if self._unk_token is None and self.verbose:
@@ -983,6 +1006,7 @@ class SpecialTokensMixin:
     @property
     def sep_token(self) -> str:
         """
+        分隔符, 用于 content 和 query 之间的分隔
         `str`: Separation token, to separate context and query in an input sequence. Log an error if used while not
         having been set.
         """
@@ -994,6 +1018,7 @@ class SpecialTokensMixin:
     @property
     def pad_token(self) -> str:
         """
+        填充符
         `str`: Padding token. Log an error if used while not having been set.
         """
         if self._pad_token is None and self.verbose:
@@ -1004,6 +1029,7 @@ class SpecialTokensMixin:
     @property
     def cls_token(self) -> str:
         """
+        分类符, 用于提取输入句子的摘要, 利用 self-attention, 沿着整个模型的深度
         `str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the full
         depth of the model. Log an error if used while not having been set.
         """
@@ -1015,6 +1041,7 @@ class SpecialTokensMixin:
     @property
     def mask_token(self) -> str:
         """
+        掩码符
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
         """
@@ -1195,7 +1222,12 @@ class SpecialTokensMixin:
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
             if attr_value:
+                # 实际上就是转换成 str
+                # 但是 attr_value 有多种类型, 如果是列表或元组, 就需要对每个值进行转换
+                # 否则就直接用 str(attr_value)
                 set_attr[attr] = (
+                    # (str(attr_value_sub) for attr_value_sub in attr_value) 是转换成 str 的元组
+                    # type(attr_value) 是 list 或者 tuple, 依然让列表保持列表的类型
                     type(attr_value)(str(attr_value_sub) for attr_value_sub in attr_value)
                     if isinstance(attr_value, (list, tuple))
                     else str(attr_value)
@@ -1212,6 +1244,7 @@ class SpecialTokensMixin:
         special tokens are tokenized.
         """
         set_attr = {}
+        # 从 SPECIAL_TOKENS_ATTRIBUTES 中获取所有的属性名
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
             if attr_value:
@@ -1225,22 +1258,27 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
+        # 就是转换为 str 类型的数组
         all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
     @property
     def all_special_tokens_extended(self) -> List[Union[str, AddedToken]]:
         """
+        获取所有的特殊 token, 这些 token 没有被强制转换为 str 类型, 有些可能是 AddedToken 的实例
         `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.) mapped to class
         attributes.
 
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
+        # 这个没有将 AddedToken 转换成 str 类型
         all_toks = []
         set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
+            # 根据 attr_value 的类型来扩展数组
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
+        # 不知道这个操作有什么意义? all_toks 本身是个数组
         all_toks = list(OrderedDict.fromkeys(all_toks))
         return all_toks
 
@@ -1250,6 +1288,7 @@ class SpecialTokensMixin:
         `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
         all_toks = self.all_special_tokens
+        # 这个 convert_tokens_to_ids 是子类实现的
         all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
 
@@ -1432,19 +1471,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     """
     Base class for [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`].
 
+    boiler plate 是锅炉板的意思, 应该就是指模板代码. 用于共享通用的方法.
     Handles shared (mostly boiler plate) methods for those two classes.
     """
 
     vocab_files_names: Dict[str, str] = {}
     pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
+    # 模型的最大输入长度
     max_model_input_sizes: Dict[str, Optional[int]] = {}
     _auto_class: Optional[str] = None
 
+    # 模型输入的名字列表
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly
     model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask"]
+    # padding 方向, 在右边或左边
     padding_side: str = "right"
+    # 截断方法, 在右边或左边
     truncation_side: str = "right"
     slow_tokenizer_class = None
 
@@ -1452,9 +1496,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = copy.deepcopy(kwargs)
+        # 名字或路径
         self.name_or_path = kwargs.pop("name_or_path", "")
+        # 处理器类
         self._processor_class = kwargs.pop("processor_class", None)
 
+        # 模型最大长度
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
@@ -1484,6 +1531,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     @property
     def max_len_single_sentence(self) -> int:
         """
+        单个句子的最大长度
         `int`: The maximum length of a sentence that can be fed to the model.
         """
         return self.model_max_length - self.num_special_tokens_to_add(pair=False)
@@ -1491,12 +1539,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     @property
     def max_len_sentences_pair(self) -> int:
         """
+        句子对的最大长度
         `int`: The maximum combined length of a pair of sentences that can be fed to the model.
         """
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
     @max_len_single_sentence.setter
     def max_len_single_sentence(self, value) -> int:
+        """这个方法已经被抛弃了"""
         # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
             if not self.deprecation_warnings.get("max_len_single_sentence", False):
@@ -1511,6 +1561,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @max_len_sentences_pair.setter
     def max_len_sentences_pair(self, value) -> int:
+        """这个方法已经被抛弃了"""
         # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
             if not self.deprecation_warnings.get("max_len_sentences_pair", False):
@@ -1536,6 +1587,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def get_vocab(self) -> Dict[str, int]:
         """
+        获取词汇表
         Returns the vocabulary as a dictionary of token to index.
 
         `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the
@@ -1647,12 +1699,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         vocab_files = {}
         init_configuration = {}
 
+        # 主要是为了填充 vocab_files
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+            # 不能使用多个词汇表文件
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
+            # 快要被抛弃了
             warnings.warn(
                 f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
                 "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
@@ -1661,14 +1716,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             file_id = list(cls.vocab_files_names.keys())[0]
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
+            # pretrained_model_name_or_path 是一个目录或者模型标识符的名字 
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
             }
+            # 合并字典
             vocab_files_target = {**cls.vocab_files_names, **additional_files_names}
 
+            # 尝试替换成快速的 tokenizer_file
             if "tokenizer_file" in vocab_files_target:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
@@ -1686,10 +1744,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
+                        # 读取配置, 尝试获取快速版的 tokenizer
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                # 获取不到也没关系, 就用普通的
                 vocab_files_target["tokenizer_file"] = fast_tokenizer_file
 
+            # 替换成完整的路径名
             # Look for the tokenizer files
             for file_id, file_name in vocab_files_target.items():
                 if os.path.isdir(pretrained_model_name_or_path):
@@ -1757,12 +1818,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     logger.debug(f"Connection problem to access {file_path} and it wasn't found in the cache.")
                     resolved_vocab_files[file_id] = None
 
+        # 如果有未解析的文件
         if len(unresolved_files) > 0:
             logger.info(
                 f"Can't load following files from cache: {unresolved_files} and cannot check if these "
                 "files are necessary for the tokenizer to operate."
             )
 
+        # 如果没有一个可用的
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             raise EnvironmentError(
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
@@ -1771,6 +1834,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"containing all relevant files for a {cls.__name__} tokenizer."
             )
 
+        # 记录下哪些已经被加载了
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
                 continue
@@ -1783,7 +1847,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return cls._from_pretrained(
             resolved_vocab_files,
             pretrained_model_name_or_path,
-            init_configuration,
+            init_configuration,  # 这个是空的字典
             *init_inputs,
             use_auth_token=use_auth_token,
             cache_dir=cache_dir,
@@ -1804,7 +1868,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
+        # has_tokenizer_file 为 True 是快速版
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+        # 如果设置了 from_slow 或者没有 tokenizer_file 文件, 且 slow_tokenizer_class 类存在,
+        # 那么就初始化 slow_tokenizer
         if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
@@ -1822,6 +1889,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
+            # 第一次尝试, 从 tokenizer_config_file 文件中读取
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
@@ -1833,9 +1901,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             config_tokenizer_class = None
             init_kwargs = init_configuration
 
+        # 当 config_tokenizer_class 不存在时
         if config_tokenizer_class is None:
             from .models.auto.configuration_auto import AutoConfig  # tests_ignore
 
+            # 第二次尝试, 从 模型配置文件 中读取
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
                 config = AutoConfig.from_pretrained(
@@ -1848,10 +1918,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # skip if an error occurred.
                 config = None
             if config_tokenizer_class is None:
+                # 第三次尝试, 从 TOKENIZER_MAPPING_NAMES 中获取
                 # Third attempt. If we have not yet found the original type of the tokenizer,
                 # we are loading we see if we can infer it from the type of the configuration file
                 from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
 
+                # 找到 model_type
                 if hasattr(config, "model_type"):
                     model_type = config.model_type
                 else:
@@ -1866,10 +1938,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     config_tokenizer_class, config_tokenizer_class_fast = TOKENIZER_MAPPING_NAMES.get(
                         model_type, (None, None)
                     )
+                    # 尝试使用快速类
                     if config_tokenizer_class is None:
                         config_tokenizer_class = config_tokenizer_class_fast
 
         if config_tokenizer_class is not None:
+            # 如果类的名字不相等
             if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
                 logger.warning(
                     "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from. "
@@ -1883,17 +1957,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Convert AddedTokens serialized as dict to class instances
         def convert_added_tokens(obj: Union[AddedToken, Any]):
+            # 如果是 dict, 且有 __type 为 AddedToken, 就重新实例化
             if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
                 obj.pop("__type")
                 return AddedToken(**obj)
+            # 对于列表和元组, 就是递归调用
             elif isinstance(obj, (list, tuple)):
                 return list(convert_added_tokens(o) for o in obj)
+            # 其他 dict, 就对每个 val 递归调用
             elif isinstance(obj, dict):
                 return {k: convert_added_tokens(v) for k, v in obj.items()}
             return obj
 
+        # 其实就是用 AddedToken 转换了遍
         init_kwargs = convert_added_tokens(init_kwargs)
 
+        # 重新更新 model_max_length
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
@@ -1902,6 +1981,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if model_max_length is not None and isinstance(model_max_length, (int, float)):
                 init_kwargs["model_max_length"] = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
 
+        # 除了 added_tokens_file 之外, 都添加到 init_kwargs 中, 如果这个 key 不存在
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
         for args_name, file_path in resolved_vocab_files.items():
@@ -1913,6 +1993,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
+        # 实例化 tokenizer
         # Instantiate tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -1927,12 +2008,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # tokenizer.init_inputs = init_inputs
         # tokenizer.init_kwargs = init_kwargs
 
+        # 添加特殊的 token
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
             for key, value in special_tokens_map.items():
+                # 如果已经存在于 kwargs 了, 就跳过
                 if key in kwargs and kwargs[key]:
                     # This value has already been redefined by the kwargs
                     # We keep this new value and ignore the one stored in the special_tokens_map_file
@@ -1945,6 +2028,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
+        # 添加补充的 token
         # Add supplementary tokens.
         special_tokens = tokenizer.all_special_tokens
         if added_tokens_file is not None:
@@ -1955,6 +2039,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
 
             for token, index in added_tok_encoder_sorted:
+                # 第一个 if 是用于 快速版 tokenizer 的
+                # 第二个 elif 是用于 慢速版 tokenizer 的
                 if has_tokenizer_file and index != len(tokenizer) and tokenizer.convert_tokens_to_ids(token) != index:
                     # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                     # index is the current length of the tokenizer (not in vocabulary)
@@ -1970,6 +2056,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
                     )
 
+                # 添加一个新的 token, 即使已经存在了也没关系, 因为前面判断过了
                 # Safe to call on a tokenizer fast even if token already there.
                 tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
 
@@ -1980,6 +2067,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained."
             )
 
+        # 返回 tokenizer 实例
         return tokenizer
 
     def save_pretrained(
@@ -3562,15 +3650,18 @@ def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:
     """
     tokenizer_files_map = {}
     for file_name in tokenization_files:
+        # 构建 版本号 和 文件名 的字典
         search = _re_tokenizer_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
             tokenizer_files_map[v] = file_name
+    # 所有可用的版本号
     available_versions = sorted(tokenizer_files_map.keys())
 
     # Defaults to FULL_TOKENIZER_FILE and then try to look at some newer versions.
     tokenizer_file = FULL_TOKENIZER_FILE
     transformers_version = version.parse(__version__)
+    # 从小找到大, 找到一个刚好小于等于当前版本号的
     for v in available_versions:
         if version.parse(v) <= transformers_version:
             tokenizer_file = tokenizer_files_map[v]
