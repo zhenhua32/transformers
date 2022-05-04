@@ -107,12 +107,15 @@ def _is_jax(x):
 
 def to_py_obj(obj):
     """
+    转换成 python 类型
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+    # 对于 dict 和 list 使用递归调用
     if isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [to_py_obj(o) for o in obj]
+    # 对于四种框架的类型进行转换, 基本都可以说是先转成 numpy 格式, 然后使用 tolist 方法
     elif is_tf_available() and _is_tensorflow(obj):
         return obj.numpy().tolist()
     elif is_torch_available() and _is_torch(obj):

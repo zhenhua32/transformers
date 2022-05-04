@@ -2890,11 +2890,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
+        # 将 dict 的列表转换成列表的 dict 形式
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
+        # input_ids 应该在 encoded_inputs 的 keys 中
         # The model's main input name, usually `input_ids`, has be passed for padding
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
@@ -2902,8 +2904,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
             )
 
+        # input_ids 是必要的 key
         required_input = encoded_inputs[self.model_input_names[0]]
 
+        # 没有获取到 input_ids 对应的值, 就直接返回
         if not required_input:
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
@@ -2922,6 +2926,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
+            # 判断 first_element 的类型, 决定更新 return_tensors 的格式, 仅当 return_tensors 是 None 时
             if is_tf_available() and _is_tensorflow(first_element):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and _is_torch(first_element):
@@ -2934,16 +2939,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
+            # 将 encoded_inputs 中的 value 更新为 python 类型
             for key, value in encoded_inputs.items():
                 encoded_inputs[key] = to_py_obj(value)
 
+        # 获取 padding 策略
         # Convert padding_strategy in PaddingStrategy
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding, max_length=max_length, verbose=verbose
         )
 
+        # 又重新定义了一次, 这不是重复, 因为 encoded_inputs 已经更新过了
         required_input = encoded_inputs[self.model_input_names[0]]
+        # 不是批次数据, 因为 required_input 中的每个元素都不是 list 或 tuple
         if required_input and not isinstance(required_input[0], (list, tuple)):
+            # 调用 _pad 方法, 然后使用 BatchEncoding
             encoded_inputs = self._pad(
                 encoded_inputs,
                 max_length=max_length,
@@ -2953,18 +2963,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
+        # 确保所有的批次数量都是相同的
         batch_size = len(required_input)
         assert all(
             len(v) == batch_size for v in encoded_inputs.values()
         ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
+            # 获取批次中的最大长度, 然后更新策略为 addingStrategy.MAX_LENGTH
+            # 这就是动态的使用最大长度, 因为 max_length 不是固定的, 而是由每个批次中的最大长度决定的
             max_length = max(len(inputs) for inputs in required_input)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
+        # 批次处理的数据
         batch_outputs = {}
         for i in range(batch_size):
+            # 对于批次中的每个索引位置, 重新构建字典
             inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
+            # 依旧是调用 _pad
             outputs = self._pad(
                 inputs,
                 max_length=max_length,
@@ -2973,6 +2989,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return_attention_mask=return_attention_mask,
             )
 
+            # 填充输出结果
             for key, value in outputs.items():
                 if key not in batch_outputs:
                     batch_outputs[key] = []
@@ -3284,6 +3301,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
+        真正的填充函数
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
@@ -3312,31 +3330,39 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         required_input = encoded_inputs[self.model_input_names[0]]
 
+        # 这是因为传入 _pad 方法的都是单个值, 不会有批量的数据
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
+        # 如果有 pad_to_multiple_of, 要求成倍数
         if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
+        # 当不为 DO_NOT_PAD 且输入的长度不等于 max_length 时, 就需要填充
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
 
+        # attention_mask 初始化
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
             encoded_inputs["attention_mask"] = [1] * len(required_input)
 
         if needs_to_be_padded:
+            # 需要填充的长度
             difference = max_length - len(required_input)
 
             if self.padding_side == "right":
                 if return_attention_mask:
-
+                    # 右边补零
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                # 如果有 encoded_inputs["token_type_ids"], 也要在右边补充
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
+                # 右边补充 1
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
+                # 补充 input_ids
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
