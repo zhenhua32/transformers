@@ -125,6 +125,7 @@ _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
 class TruncationStrategy(ExplicitEnum):
     """
+    截断策略
     Possible values for the `truncation` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in
     an IDE.
     """
@@ -137,6 +138,7 @@ class TruncationStrategy(ExplicitEnum):
 
 class CharSpan(NamedTuple):
     """
+    字符跨度, 或者说片段
     Character span in the original string.
 
     Args:
@@ -150,6 +152,7 @@ class CharSpan(NamedTuple):
 
 class TokenSpan(NamedTuple):
     """
+    token 跨度
     Token span in an encoded string (list of tokens).
 
     Args:
@@ -163,6 +166,7 @@ class TokenSpan(NamedTuple):
 
 class BatchEncoding(UserDict):
     """
+    保存 PreTrainedTokenizerBase 的输出
     Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.__call__`],
     [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
     [`~tokenization_utils_base.PreTrainedTokenizerBase.batch_encode_plus`] methods (tokens, attention_masks, etc).
@@ -198,11 +202,14 @@ class BatchEncoding(UserDict):
     ):
         super().__init__(data)
 
+        # 转成数组
         if isinstance(encoding, EncodingFast):
             encoding = [encoding]
 
+        # encoding 是用于快速版 tokenizer 的, 然后要求是个数组
         self._encodings = encoding
 
+        # 需要指定 n_sequences, 可以从 encoding 中推导出来
         if n_sequences is None and encoding is not None and len(encoding):
             n_sequences = encoding[0].n_sequences
 
@@ -213,6 +220,7 @@ class BatchEncoding(UserDict):
     @property
     def n_sequences(self) -> Optional[int]:
         """
+        当前只能是 None, 或者 1 或者 2, 表示是序列的数量, 1 是单序列, 2 是序列对
         `Optional[int]`: The number of sequences used to generate each sample from the batch encoded in this
         [`BatchEncoding`]. Currently can be one of `None` (unknown), `1` (a single sentence) or `2` (a pair of
         sentences)
@@ -229,6 +237,7 @@ class BatchEncoding(UserDict):
 
     def __getitem__(self, item: Union[int, str]) -> Union[Any, EncodingFast]:
         """
+        获取指定 key 的值
         If the key is a string, returns the value of the dict associated to `key` ('input_ids', 'attention_mask',
         etc.).
 
@@ -237,6 +246,7 @@ class BatchEncoding(UserDict):
         if isinstance(item, str):
             return self.data[item]
         elif self._encodings is not None:
+            # 这就是个索引, 因为 _encodings 是个数组
             return self._encodings[item]
         else:
             raise KeyError(
@@ -254,6 +264,7 @@ class BatchEncoding(UserDict):
         return {"data": self.data, "encodings": self._encodings}
 
     def __setstate__(self, state):
+        # 只挑出两个值
         if "data" in state:
             self.data = state["data"]
 
@@ -272,6 +283,7 @@ class BatchEncoding(UserDict):
     # After this point:
     # Extended properties and methods only available for fast (Rust-based) tokenizers
     # provided by HuggingFace tokenizers library.
+    # 下面这些都是快速版才有的功能
 
     @property
     def encodings(self) -> Optional[List[EncodingFast]]:
@@ -283,6 +295,7 @@ class BatchEncoding(UserDict):
 
     def tokens(self, batch_index: int = 0) -> List[str]:
         """
+        获取 tokens 列表
         Return the list of tokens (sub-parts of the input strings after word/subword splitting and before conversion to
         integer indices) at a given batch index (only works for the output of a fast tokenizer).
 
@@ -298,6 +311,7 @@ class BatchEncoding(UserDict):
 
     def sequence_ids(self, batch_index: int = 0) -> List[Optional[int]]:
         """
+        获取序列 id 的列表
         Return a list mapping the tokens to the id of their original sentences:
 
             - `None` for special tokens added around or between sequences,
@@ -331,6 +345,7 @@ class BatchEncoding(UserDict):
         """
         if not self._encodings:
             raise ValueError("words() is not available when using Python-based tokenizers")
+        # 这已经是个被抛弃的方法了, 应该使用 word_ids, 从名字上看意义更明确, 因为返回的是 id 的列表
         warnings.warn(
             "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
             "but more self-explanatory `BatchEncoding.word_ids()` property.",
@@ -356,6 +371,7 @@ class BatchEncoding(UserDict):
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
+        根据 token 获取序列的索引.
         Get the index of the sequence represented by the given token. In the general use case, this method returns `0`
         for a single sequence or the first sequence of a pair, and `1` for the second sequence of a pair
 
@@ -385,9 +401,13 @@ class BatchEncoding(UserDict):
         if token_index is not None:
             batch_index = batch_or_token_index
         else:
+            # token_index 不存在时, 就相当于只有一个批次, 所以 batch_index 是 0
             batch_index = 0
             token_index = batch_or_token_index
+        # 支持负数索引, 原来负数索引是这么实现的, 直接获取总长度, 然后加上负数索引.
+        # 比如 总长度是 2, 负数索引是 1, 那么就是 2 + -1 = 1, 即 a[1] = a[-1]
         if batch_index < 0:
+            # _batch_size 是从属性中获取的, 也就是调用 __getattr__
             batch_index = self._batch_size + batch_index
         if token_index < 0:
             token_index = self._seq_len + token_index
@@ -395,6 +415,7 @@ class BatchEncoding(UserDict):
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
+        根据 token 获取 word 的索引
         Get the index of the word corresponding (i.e. comprising) to an encoded token in a sequence of the batch.
 
         Can be called as:
@@ -429,6 +450,7 @@ class BatchEncoding(UserDict):
             batch_index = self._batch_size + batch_index
         if token_index < 0:
             token_index = self._seq_len + token_index
+        # 和 token_to_sequence 类似, 就是这里调用的方法替换掉了
         return self._encodings[batch_index].token_to_word(token_index)
 
     def word_to_tokens(
@@ -650,6 +672,7 @@ class BatchEncoding(UserDict):
         self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
     ):
         """
+        将内部的数据转换成 tensor 格式
         Convert the inner content to tensors.
 
         Args:
@@ -699,12 +722,14 @@ class BatchEncoding(UserDict):
         #         f"Unable to convert output to tensors format {tensor_type}"
         #     )
 
+        # 将内部的数据, 转换成 tensor 格式
         # Do the tensor conversion in batch
         for key, value in self.items():
             try:
                 if prepend_batch_axis:
                     value = [value]
 
+                # 转换类型
                 if not is_tensor(value):
                     tensor = as_tensor(value)
 
@@ -732,6 +757,7 @@ class BatchEncoding(UserDict):
     @torch_required
     def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
+        发送到某个设备上, 只对 pytorch 可用
         Send all values to device by calling `v.to(device)` (PyTorch only).
 
         Args:
@@ -745,6 +771,7 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
+            # 对字典中的每个值调用
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
