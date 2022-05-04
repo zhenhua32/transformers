@@ -1996,6 +1996,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # 实例化 tokenizer
         # Instantiate tokenizer.
         try:
+            # 这个类 PreTrainedTokenizerBase 本身是没有位置参数 *args 的
             tokenizer = cls(*init_inputs, **init_kwargs)
         except OSError:
             raise OSError(
@@ -2079,6 +2080,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs,
     ) -> Tuple[str]:
         """
+        保存所有的 token.
         Save the full tokenizer state.
 
 
@@ -2134,12 +2136,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
 
+        # 初始化时的参数
         tokenizer_config = copy.deepcopy(self.init_kwargs)
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
+        # 和前面的 def convert_added_tokens 相反
         # Sanitize AddedTokens
         def convert_added_tokens(obj: Union[AddedToken, Any], add_type_field=True):
             if isinstance(obj, AddedToken):
@@ -2156,12 +2160,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
         tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
 
+        # 获取类名
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
         # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
         if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
+        # 添加其他两个属性
         if getattr(self, "_auto_map", None) is not None:
             tokenizer_config["auto_map"] = self._auto_map
         if getattr(self, "_processor_class", None) is not None:
@@ -2210,6 +2216,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
         specific [`~tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`]
         """
+        # 快速版不能用这个方法
         if legacy_format is False:
             raise ValueError(
                 "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
@@ -2220,6 +2227,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
+        # get_added_vocab 没有在这个类里定义
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
@@ -2227,12 +2235,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f.write(out_str)
                 logger.info(f"added tokens file saved in {added_tokens_file}")
 
+        # 保存词汇表
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
+        # 返回保存的文件名的元组
         return file_names + vocab_files + (added_tokens_file,)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
+        保存词汇表
         Save only the vocabulary of the tokenizer (vocabulary + added tokens).
 
         This method won't save the configuration and special token mappings of the tokenizer. Use
@@ -2251,6 +2262,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
+        将字符串转换成序列的列表
         Converts a string in a sequence of tokens, replacing unknown tokens with the `unk_token`.
 
         Args:
@@ -2292,6 +2304,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs
     ) -> List[int]:
         """
+        将字符串转换为 id 的列表
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
 
         Same as doing `self.convert_tokens_to_ids(self.tokenize(text))`.
@@ -2318,6 +2331,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **kwargs,
         )
 
+        # 原来是只取 input_ids 字段
         return encoded_inputs["input_ids"]
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
@@ -2327,6 +2341,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, padding=False, truncation=False, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
     ):
         """
+        获取填充或截断的策略
         Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
         and pad_to_max_length) and behaviors.
         """
@@ -2364,6 +2379,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 padding_strategy = PaddingStrategy.MAX_LENGTH
         elif padding is not False:
+            # 如果为 True, 就使用 addingStrategy.LONGEST
             if padding is True:
                 if verbose:
                     if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
@@ -2374,11 +2390,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if old_pad_to_max_length is not False:
                         warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
+            # 其余两种情况都是转换为 PaddingStrategy 的实例
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
             elif isinstance(padding, PaddingStrategy):
                 padding_strategy = padding
         else:
+            # False 就是 DO_NOT_PAD
             padding_strategy = PaddingStrategy.DO_NOT_PAD
 
         # Get truncation strategy
@@ -2397,20 +2415,25 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
             truncation_strategy = TruncationStrategy(old_truncation_strategy)
         elif truncation is not False:
+            # True 就是 LONGEST_FIRST
             if truncation is True:
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST
                 )  # Default to truncate the longest sequences in pairs of inputs
+            # 其他两种情况都转换为 TruncationStrategy 的实例
             elif not isinstance(truncation, TruncationStrategy):
                 truncation_strategy = TruncationStrategy(truncation)
             elif isinstance(truncation, TruncationStrategy):
                 truncation_strategy = truncation
         else:
+            # False 就是 DO_NOT_TRUNCATE
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
 
         # Set max length if needed
         if max_length is None:
+            # 将 max_length 设置为 self.model_max_length
             if padding_strategy == PaddingStrategy.MAX_LENGTH:
+                # 超出 LARGE_INTEGER 就被修改为 DO_NOT_PAD
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
                         if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
@@ -2424,6 +2447,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length = self.model_max_length
 
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+                # 超出 LARGE_INTEGER 就被修改为 DO_NOT_TRUNCATE
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
                         if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
@@ -2444,6 +2468,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
             )
 
+        # pad_to_multiple_of 如果设置了, 就要求 max_length 是 pad_to_multiple_of 的倍数
         # Check that we will truncate to a multiple of pad_to_multiple_of if both are provided
         if (
             truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
@@ -2482,6 +2507,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs
     ) -> BatchEncoding:
         """
+        tokenize 的主要方法.
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
         sequences.
 
@@ -2495,12 +2521,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
+        # 检查输入的类型
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
                 # Strings are fine
                 return True
             elif isinstance(t, (list, tuple)):
+                # 都是只检查第一个元素
                 # List are fine as long as they are...
                 if len(t) == 0:
                     # ... empty
@@ -2509,6 +2537,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     # ... list of strings
                     return True
                 elif isinstance(t[0], (list, tuple)):
+                    # 还能嵌套, 同样只检查第一个元素
                     # ... list with an empty list or with a list of strings
                     return len(t[0]) == 0 or isinstance(t[0][0], str)
                 else:
@@ -2528,9 +2557,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "or `List[List[str]]` (batch of pretokenized examples)."
             )
 
+        # 输入是否已经预先切成单词了
         if is_split_into_words:
+            # 判断是否是批次处理. 批次处理应该是 列表的列表
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
         else:
+            # 批次处理应该是 列表
             is_batched = isinstance(text, (list, tuple))
 
         if is_batched:
@@ -2542,7 +2574,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 raise ValueError(
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
                 )
+            # 如果 text_pair 存在, 就合并 text 转换为元组的数组. text_pair 就是第二个序列
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            # 批次处理调用 batch_encode_plus
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
                 add_special_tokens=add_special_tokens,
@@ -2563,6 +2597,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 **kwargs,
             )
         else:
+            # 如果不是批次处理, 也是调用 encode_plus
             return self.encode_plus(
                 text=text,
                 text_pair=text_pair,
@@ -2800,6 +2835,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         verbose: bool = True,
     ) -> BatchEncoding:
         """
+        填充, 将一个单个的输入填充到指定的长度, 或者将一个批次的输入填充为当前批次最大的长度.
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch.
 
@@ -3338,6 +3374,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs
     ) -> List[str]:
         """
+        批量操作, 就是对列表中的每个元素调用了 self.decode 方法.
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
@@ -3371,6 +3408,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs
     ) -> str:
         """
+        将 id 的序列转换为字符串
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
         tokens and clean up tokenization spaces.
 
