@@ -3028,6 +3028,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
+        同样也应该在子类中覆盖. 当前是 token_ids_0 的长度为 0, token_ids_1 的长度为 1, 组合成数组
         Create the token type IDs corresponding to the sequences passed. [What are token type
         IDs?](../glossary#token-type-ids)
 
@@ -3048,6 +3049,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
+        这个方法应该要在子类中覆盖, 当前的实现并没有特殊处理, 只是把 token_ids_0 和 token_ids_1 加起来
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens.
 
@@ -3087,6 +3089,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs
     ) -> BatchEncoding:
         """
+        准备用于模型输入的 input ids 序列, 或者序列对.
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
         adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
         manages a moving window (with user defined stride) for overflowing tokens. Please Note, for *pair_ids*
@@ -3112,8 +3115,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **kwargs,
         )
 
+        # 是否是序列对
         pair = bool(pair_ids is not None)
+        # 第一个序列的长度
         len_ids = len(ids)
+        # 第二个序列的长度
         len_pair_ids = len(pair_ids) if pair else 0
 
         if return_token_type_ids and not add_special_tokens:
@@ -3140,13 +3146,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
+        # 编码后的输入
         encoded_inputs = {}
 
+        # 计算输入的总长度, 等于 第一个序列的长度 + 第二个序列的长度 + 特殊token的长度
         # Compute the total size of the returned encodings
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
+        # 需要截断的情况
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -3156,16 +3165,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 stride=stride,
             )
 
+        # 需要返回截断的 token
         if return_overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
             encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
+            # 需要添加特殊 token 的情况
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
         else:
+            # 否则就是直接加起来就行, 如果有第二个序列
             sequence = ids + pair_ids if pair else ids
+            # token_type_ids 都是 0 的数组
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
 
         # Build output dictionary
@@ -3181,6 +3194,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Check lengths
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
 
+        # 填充在截断之后. 截断保证最大长度不会超出, 填充保持长度一致
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
             encoded_inputs = self.pad(
@@ -3209,6 +3223,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         stride: int = 0,
     ) -> Tuple[List[int], List[int], List[int]]:
         """
+        截断序列.
         Truncates a sequence pair in-place following the strategy.
 
         Args:
@@ -3244,18 +3259,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if a pair
             of sequences (or a batch of pairs) is provided.
         """
+        # 负数表示不需要截断
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
 
+        # 转换类型, 从 str 转换为 TruncationStrategy
         if not isinstance(truncation_strategy, TruncationStrategy):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
+        # 如果只截断第一个序列, 或者虽然是 LONGEST_FIRST 但是没有 pair_ids, 即第二个序列
+        # LONGEST_FIRST 意思是说最长的优先被截断
         if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
             truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
         ):
             if len(ids) > num_tokens_to_remove:
+                # stride + num_tokens_to_remove 是需要截断的 token 数量
+                # 使用 min 是因为这个长度可能超过 ids 的长度
                 window_len = min(len(ids), stride + num_tokens_to_remove)
+                # 根据截断方法操作. 实际上从 ids 中移除的数量是 num_tokens_to_remove. 
+                # 但是 overflowing_tokens 可能会多取一点, 因为有 stride
                 if self.truncation_side == "left":
                     overflowing_tokens = ids[:window_len]
                     ids = ids[num_tokens_to_remove:]
@@ -3266,6 +3289,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     raise ValueError(f"invalid truncation strategy: {self.truncation_side}, use 'left' or 'right'.")
 
             else:
+                # 这边显示第一个序列长度不够, 要截断的数量比第一个序列多
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the first sequence has a length {len(ids)}. "
@@ -3277,13 +3301,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     )
                 logger.error(error_msg)
         elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            # 这种情况下不会返回 overflowing_tokens
             logger.warning(
                 f"Be aware, overflowing tokens are not returned for the setting you have chosen,"
                 f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
                 f"truncation strategy. So the returned list will always be empty even if some "
                 f"tokens have been removed."
             )
+            # 循环 num_tokens_to_remove 的长度
             for _ in range(num_tokens_to_remove):
+                # 当第二个序列没有, 或者第一个序列比第二个序列长, 那么先从第一个序列开始截断
                 if pair_ids is None or len(ids) > len(pair_ids):
                     if self.truncation_side == "right":
                         ids = ids[:-1]
@@ -3299,6 +3326,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     else:
                         raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+            # 这边和截断第一个序列时没什么差别, 只是把第二个序列截断
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 if self.truncation_side == "right":
@@ -3355,6 +3383,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
+        # 只对 input_ids 进行处理
         required_input = encoded_inputs[self.model_input_names[0]]
 
         # 这是因为传入 _pad 方法的都是单个值, 不会有批量的数据
@@ -3517,6 +3546,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
+        # token_ids_1 目前只用在这里, 没有用在下面的 for 循环中
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
             "Please use a slow (full python) tokenizer to activate this argument. "
@@ -3526,6 +3556,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         all_special_ids = self.all_special_ids  # cache the property
 
+        # 如果 token 在特殊 token 中就是1, 否则就是 0
         special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
 
         return special_tokens_mask
@@ -3566,6 +3597,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             verbose (`bool`): Whether or not to print more information and warnings.
 
         """
+        # 如果 max_length 没设置, 且 ids 的长度大于 self.model_max_length
         if max_length is None and len(ids) > self.model_max_length and verbose:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(
