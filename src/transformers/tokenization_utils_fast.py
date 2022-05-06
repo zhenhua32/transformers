@@ -75,6 +75,7 @@ VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
+    快速版 tokenizer 类
     Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
 
     Inherits from [`~tokenization_utils_base.PreTrainedTokenizerBase`].
@@ -88,6 +89,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
+    # 能保存慢速版的 tokenizer
     can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
@@ -96,6 +98,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
 
+        # 如果是来自慢速版本的, 需要 slow_tokenizer 或者 slow_tokenizer_class 不为 None
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
@@ -105,12 +108,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if tokenizer_object is not None:
             fast_tokenizer = tokenizer_object
         elif fast_tokenizer_file is not None and not from_slow:
+            # 直接可用, 从文件中加载快速版的 tokenizer
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
+            # 从慢速版转换过来
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif self.slow_tokenizer_class is not None:
+            # 先初始化慢速版的类, 然后再转换成快速版
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
@@ -160,6 +166,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
         full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
+        # 对了一个差集的 dict
         added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
         return added_vocab
 
@@ -179,6 +186,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     @property
     def decoder(self) -> DecoderFast:
         """
+        解码器
         `tokenizers.decoders.Decoder`: The Rust decoder for this tokenizer.
         """
         return self._tokenizer.decoder
@@ -195,6 +203,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         verbose: bool = True,
     ) -> Tuple[Dict[str, Any], List[EncodingFast]]:
         """
+        转换底层输出
         Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict and a list
         of encodings, take care of building a batch from overflowing tokens.
 
@@ -208,11 +217,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
+        # 需要 overflowing
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing
         else:
             encodings = [encoding]
 
+        # 变成一个字典, 值是一个数组
         encoding_dict = defaultdict(list)
         for e in encodings:
             encoding_dict["input_ids"].append(e.ids)
@@ -247,12 +258,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
+        # 如果是数组, 最后也返回一个数组
         ids = []
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
         return ids
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
+        """如果是None, 用 unk_token_id 替换, 其他返回 token_to_id 的结果"""
         index = self._tokenizer.token_to_id(token)
         if index is None:
             return self.unk_token_id
@@ -262,6 +275,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self._tokenizer.id_to_token(int(index))
 
     def _add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_tokens=False) -> int:
+        """添加 token"""
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
@@ -269,6 +283,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
+        返回编码一个序列时添加的特殊 token 的数量
         Returns the number of added tokens when encoding a sequence with special tokens.
 
         <Tip>
@@ -292,6 +307,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
         """
+        将单个索引或者一个序列的索引转换成 token
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
 
@@ -346,10 +362,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
         """
+        # 获取当前的截断和填充策略
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
+            # 将截断不为空时, 更新为 no_truncation
             if _truncation is not None:
                 self._tokenizer.no_truncation()
         else:
@@ -373,6 +391,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 self._tokenizer.enable_truncation(**target)
 
         if padding_strategy == PaddingStrategy.DO_NOT_PAD:
+            # 同理, 当填充不为空时, 更新为 no_padding
             if _padding is not None:
                 self._tokenizer.no_padding()
         else:

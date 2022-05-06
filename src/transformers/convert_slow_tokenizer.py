@@ -1000,6 +1000,7 @@ class XGLMConverter(SpmConverter):
         )
 
 
+# 慢速版到快速版的转换
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1050,6 +1051,7 @@ SLOW_TO_FAST_CONVERTERS = {
 
 def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     """
+    将慢速版的 tokenizer 转换为快速版的 tokenizer
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
@@ -1070,6 +1072,7 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
             f"No converter was found. Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
         )
 
+    # 转换后的类
     converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
 
     return converter_class(transformer_tokenizer).converted()
