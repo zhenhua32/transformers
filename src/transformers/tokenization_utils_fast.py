@@ -387,6 +387,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             else:
                 current = {k: _truncation.get(k, None) for k in target}
 
+            # 验证截断效果是否相同, 不同的话就重新设置
             if current != target:
                 self._tokenizer.enable_truncation(**target)
 
@@ -428,7 +429,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
+        """批量编码"""
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -513,6 +514,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         **kwargs
     ) -> BatchEncoding:
 
+        # 是否是序列对
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
             batched_input,
@@ -537,6 +539,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # Return tensor is None, then we can remove the leading batch axis
         # Overflowing tokens are returned as a batch of output so we keep them in this case
         if return_tensors is None and not return_overflowing_tokens:
+            # value 中只取第一个值, 如果是数组的话, 就是移除 batch axis
             batched_output = BatchEncoding(
                 {
                     key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
