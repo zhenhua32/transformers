@@ -672,7 +672,7 @@ class BatchEncoding(UserDict):
         self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
     ):
         """
-        将内部的数据转换成 tensor 格式
+        将内部的数据转换成 tensor 格式, 支持 TENSORFLOW, PYTORCH, JAX, 和 Numpy
         Convert the inner content to tensors.
 
         Args:
@@ -3564,6 +3564,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """
+        清理一些简单的英文 tokenization 的问题, 主要就是把前面的空格去掉.
         Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
 
         Args:

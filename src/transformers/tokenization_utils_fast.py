@@ -367,7 +367,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         _padding = self._tokenizer.padding
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
-            # 将截断不为空时, 更新为 no_truncation
+            # 当截断不为空时, 更新为 no_truncation
             if _truncation is not None:
                 self._tokenizer.no_truncation()
         else:
@@ -430,9 +430,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         verbose: bool = True,
     ) -> BatchEncoding:
         """批量编码"""
+        # 要求是个数组
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
+        # 更新截断和填充策略
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
             padding_strategy=padding_strategy,
@@ -442,12 +444,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             pad_to_multiple_of=pad_to_multiple_of,
         )
 
+        # 调用 _tokenizer 的批量编码
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
             is_pretokenized=is_split_into_words,
         )
 
+        # 转换结构, _convert_encoding 会返回一个元组, encoding_dict 和 encodings
         # Convert encoding to dict
         # `Tokens` has type: Tuple[
         #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
@@ -474,21 +478,28 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         #
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
+        # 又重新搞了一个字典
         sanitized_tokens = {}
+        # tokens_and_encodings[0][0] 就是一个 encoding_dict
         for key in tokens_and_encodings[0][0].keys():
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
+            # 这就是将 tokens_and_encodings 数组中的, 每个都是一个元组, 然后元组的第一个是 encoding_dict
+            # 将 encoding_dict 中的每个 key 的值汇聚起来, 重新变成一个大的 list
             sanitized_tokens[key] = stack
+        # 这边就是将元组中的第二个元素, 也就是 encodings 重新变成一个大的 list
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
 
         # If returning overflowing tokens, we need to return a mapping
         # from the batch idx to the original sample
         if return_overflowing_tokens:
             overflow_to_sample_mapping = []
+            # 这个就是从 0 开始, 每个都是 input_ids 的长度. 用来区分是 batch_text_or_text_pairs 数组中哪个索引的
             for i, (toks, _) in enumerate(tokens_and_encodings):
                 overflow_to_sample_mapping += [i] * len(toks["input_ids"])
             sanitized_tokens["overflow_to_sample_mapping"] = overflow_to_sample_mapping
 
         for input_ids in sanitized_tokens["input_ids"]:
+            # 所以每个 input_ids 都是一个数组
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
@@ -564,6 +575,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
+        # 转成数组
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
@@ -587,20 +599,24 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         save_directory = str(save_directory)
 
+        # 当没有提供 slow_tokenizer_class 时, 不能使用 legacy_format
         if self.slow_tokenizer_class is None and legacy_format is True:
             raise ValueError(
                 "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You "
                 "might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
+        # 可以保存成慢速形式
         save_slow = (
             (legacy_format is None or legacy_format is True)
             and self.slow_tokenizer_class is not None
             and self.can_save_slow_tokenizer
         )
+        # 可以保存成快速形式
         save_fast = legacy_format is None or legacy_format is False
 
         if save_slow:
+            # 添加的 tokens 的文件
             added_tokens_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
             )
@@ -610,6 +626,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     out_str = json.dumps(added_vocab, ensure_ascii=False)
                     f.write(out_str)
 
+            # 保存词汇表, 但这个类里也没实现, 父类里也没实现
             vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
             file_names = file_names + vocab_files + (added_tokens_file,)
 
@@ -620,6 +637,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self.backend_tokenizer.save(tokenizer_file)
             file_names = file_names + (tokenizer_file,)
 
+        # file_names 里是保存的文件名的列表
         return file_names
 
     def train_new_from_iterator(
@@ -632,6 +650,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         **kwargs,
     ):
         """
+        在新的语料上训练一个新模型.
         Trains a tokenizer on a new corpus with the same defaults (in terms of special tokens or tokenization pipeline)
         as the current one.
 
@@ -662,6 +681,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # Remove post processor for now (uses IDs of tokens)
         post_processor = tokenizer_json.pop("post_processor")
 
+        # 清空词汇表, 只支持 BPE, Unigram, WordLevel and WordPiece 四种分词方式
         unk_token = None
         # Remove vocab
         if tokenizer_json["model"]["type"] == "BPE":
@@ -671,8 +691,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if tokenizer_json["model"]["unk_id"] is not None:
                 unk_id = tokenizer_json["model"]["unk_id"]
                 unk_token = tokenizer_json["model"]["vocab"][unk_id][0]
+                # 如果在特殊 token 映射中, 还要进一步寻找
                 if special_tokens_map is not None and unk_token in special_tokens_map:
                     unk_token = special_tokens_map[unk_token]
+                # 重置 unk_id 为 0, 并更新 vocab
                 tokenizer_json["model"]["unk_id"] = 0
                 tokenizer_json["model"]["vocab"] = [[unk_token, 0.0]]
         elif tokenizer_json["model"]["type"] in ["WordLevel", "WordPiece"]:
@@ -683,6 +705,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "only BPE, Unigram, WordLevel and WordPiece."
             )
 
+        # 如果传递了 special_tokens_map 参数, 就更新 unk_token
         if (
             special_tokens_map is not None
             and "unk_token" in tokenizer_json["model"]
@@ -690,8 +713,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         ):
             tokenizer_json["model"]["unk_token"] = special_tokens_map[tokenizer_json["model"]["unk_token"]]
 
+        # 重新初始化分词器
         tokenizer = TokenizerFast.from_str(json.dumps(tokenizer_json))
 
+        # 重新生成 special_tokens, 从 added_tokens 中提取
         # Get the special tokens from the current tokenizer if none are specified.
         special_tokens = []
         for added_token in added_tokens:
@@ -699,6 +724,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             _ = added_token.pop("id", None)
             if tokenizer_json["model"]["type"] != "Unigram" and not special:
                 continue
+            # 如果需要映射, 就替换掉
             if special_tokens_map is not None and added_token["content"] in special_tokens_map:
                 added_token["content"] = special_tokens_map[added_token["content"]]
             special_tokens.append(AddedToken(**added_token))
@@ -706,6 +732,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if new_special_tokens is not None:
             special_tokens.extend(new_special_tokens)
 
+        # 更新 kwargs
         # Trainer needs to know the end of word / continuing subword thingies in BPE
         if (
             tokenizer_json["model"]["type"] == "BPE"
@@ -722,10 +749,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
 
+        # 实例化训练器类
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
+        # 从 text_iterator 中进行训练
         tokenizer.train_from_iterator(text_iterator, length=length, trainer=trainer)
 
+        # 如果有后处理器
         if post_processor is not None:
             trained_tokenizer_json = json.loads(tokenizer.to_str())
             # Almost done, we just have to adjust the token IDs in the post processor
@@ -734,6 +764,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     tokens = post_processor["special_tokens"][key]["tokens"]
                     if special_tokens_map is not None:
                         tokens = [special_tokens_map.get(token, token) for token in tokens]
+                    # 更新 special_tokens 的 tokens 和 ids
                     post_processor["special_tokens"][key]["tokens"] = tokens
                     post_processor["special_tokens"][key]["ids"] = [tokenizer.token_to_id(token) for token in tokens]
 
@@ -746,6 +777,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                     post_processor[special_token] = [token, token_id]
 
             trained_tokenizer_json["post_processor"] = post_processor
+            # 重新初始化
             tokenizer = TokenizerFast.from_str(json.dumps(trained_tokenizer_json))
 
         kwargs = self.init_kwargs.copy()
@@ -772,10 +804,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 else:
                     kwargs[token] = special_token
 
+        # 更新额外的特殊 tokens
         additional_special_tokens = self.additional_special_tokens
         if new_special_tokens is not None:
             additional_special_tokens.extend(new_special_tokens)
         if len(additional_special_tokens) > 0:
             kwargs["additional_special_tokens"] = additional_special_tokens
 
+        # 重新实例化
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
