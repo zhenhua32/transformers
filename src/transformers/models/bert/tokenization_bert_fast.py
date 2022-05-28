@@ -26,6 +26,7 @@ from .tokenization_bert import BertTokenizer
 
 logger = logging.get_logger(__name__)
 
+# 词汇表名字
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -71,6 +72,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
+# 预训练的位置嵌入的尺寸
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "bert-base-uncased": 512,
     "bert-large-uncased": 512,
@@ -92,6 +94,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "wietsedv/bert-base-dutch-cased": 512,
 }
 
+# 预训练的配置信息
 PRETRAINED_INIT_CONFIGURATION = {
     "bert-base-uncased": {"do_lower_case": True},
     "bert-large-uncased": {"do_lower_case": True},
@@ -174,6 +177,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         strip_accents=None,
         **kwargs
     ):
+        # 先调用父类初始化
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -188,12 +192,14 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        # 状态
         normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
         if (
             normalizer_state.get("lowercase", do_lower_case) != do_lower_case
             or normalizer_state.get("strip_accents", strip_accents) != strip_accents
             or normalizer_state.get("handle_chinese_chars", tokenize_chinese_chars) != tokenize_chinese_chars
         ):
+            # 如果发现状态不一致, 以传入的参数为准
             normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
             normalizer_state["lowercase"] = do_lower_case
             normalizer_state["strip_accents"] = strip_accents
@@ -204,6 +210,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
+        添加首尾的特殊字符
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
 
@@ -219,6 +226,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
+        # 加上前后特殊字符
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
         if token_ids_1:
@@ -230,6 +238,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
+        创建 token_type_ids
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
         pair mask has the following format:
 
@@ -256,5 +265,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        """保存词汇表"""
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)

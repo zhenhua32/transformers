@@ -95,7 +95,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 
 def load_vocab(vocab_file):
-    """Loads a vocabulary file into a dictionary."""
+    """加载词汇表. Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as reader:
         tokens = reader.readlines()
@@ -106,7 +106,7 @@ def load_vocab(vocab_file):
 
 
 def whitespace_tokenize(text):
-    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    """空白分词器. Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
     if not text:
         return []
@@ -195,9 +195,11 @@ class BertTokenizer(PreTrainedTokenizer):
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
+        # 加载词汇表
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
+        # 两个分词器
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
                 do_lower_case=do_lower_case,
@@ -330,18 +332,22 @@ class BertTokenizer(PreTrainedTokenizer):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
+            # 创建的词汇表文件名是 vocab.txt 结尾的
             vocab_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
             )
         else:
+            # 或者 save_directory 就是个文件名
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                # 索引不可靠, 可能是缺失了哪个部分, 就是说 self.vocab 可能被人修改了
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )
+                    # 当索引坏了的时候, 就用 index 重置一下
                     index = token_index
                 writer.write(token + "\n")
                 index += 1
@@ -350,6 +356,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
 class BasicTokenizer(object):
     """
+    基础分词器
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
@@ -374,6 +381,7 @@ class BasicTokenizer(object):
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
+        # strip 重音符号
         self.strip_accents = strip_accents
 
     def tokenize(self, text, never_split=None):
@@ -398,23 +406,27 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
+        # 使用的是空白分词器
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
                 if self.do_lower_case:
                     token = token.lower()
+                    # 是否需要去除重音符号
                     if self.strip_accents is not False:
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
+            # 加入列表
             split_tokens.extend(self._run_split_on_punc(token, never_split))
 
+        # 再来一遍
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
 
     def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
+        """去除重音符. Strips accents from a piece of text."""
         text = unicodedata.normalize("NFD", text)
         output = []
         for char in text:
@@ -425,7 +437,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
     def _run_split_on_punc(self, text, never_split=None):
-        """Splits punctuation on a piece of text."""
+        """拆分标点符号. Splits punctuation on a piece of text."""
         if never_split is not None and text in never_split:
             return [text]
         chars = list(text)
@@ -434,20 +446,24 @@ class BasicTokenizer(object):
         output = []
         while i < len(chars):
             char = chars[i]
+            # 如果是标点, 就拆分, 开始新的单词
             if _is_punctuation(char):
                 output.append([char])
                 start_new_word = True
             else:
+                # 加一个新的列表, 用来保存单词
                 if start_new_word:
                     output.append([])
                 start_new_word = False
+                # 加到当前最后一个单词的最后
                 output[-1].append(char)
             i += 1
 
+        # 将里面的小数组变成单词
         return ["".join(x) for x in output]
 
     def _tokenize_chinese_chars(self, text):
-        """Adds whitespace around any CJK character."""
+        """分割中文字符. 就是在每个中文字符的前后加上空白符. Adds whitespace around any CJK character."""
         output = []
         for char in text:
             cp = ord(char)
@@ -460,7 +476,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
     def _is_chinese_char(self, cp):
-        """Checks whether CP is the codepoint of a CJK character."""
+        """判断是否是中文字符. Checks whether CP is the codepoint of a CJK character."""
         # This defines a "chinese character" as anything in the CJK Unicode block:
         #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
         #
@@ -488,8 +504,10 @@ class BasicTokenizer(object):
         output = []
         for char in text:
             cp = ord(char)
+            # 跳过无用的字符
             if cp == 0 or cp == 0xFFFD or _is_control(char):
                 continue
+            # 统一空白符
             if _is_whitespace(char):
                 output.append(" ")
             else:
@@ -523,6 +541,7 @@ class WordpieceTokenizer(object):
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
+            # 超过最大长度的不要
             if len(chars) > self.max_input_chars_per_word:
                 output_tokens.append(self.unk_token)
                 continue
@@ -533,22 +552,30 @@ class WordpieceTokenizer(object):
             while start < len(chars):
                 end = len(chars)
                 cur_substr = None
+                # 因为 end -= 1, 所以是从后面开始的, 即是从最长的可能开始推测
                 while start < end:
+                    # 当前的部分字符
                     substr = "".join(chars[start:end])
+                    # 如果 start 大于 0, 就在前面加上 ##, 表示不是单词的开头, 而是拆分出来的单词
                     if start > 0:
                         substr = "##" + substr
+                    # 如果在词汇表中, 可以跳出循环了
                     if substr in self.vocab:
                         cur_substr = substr
                         break
                     end -= 1
+                # 没发现可用的, 跳过外层的 while 循环
                 if cur_substr is None:
                     is_bad = True
                     break
+                # 添加当前发现的部分
                 sub_tokens.append(cur_substr)
                 start = end
 
+            # 使用未知的 token
             if is_bad:
                 output_tokens.append(self.unk_token)
             else:
+                # sub_tokens 数组, 也就是可能发现了多个片段
                 output_tokens.extend(sub_tokens)
         return output_tokens

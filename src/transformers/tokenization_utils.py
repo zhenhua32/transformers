@@ -293,7 +293,7 @@ class Trie:
 
 
 def _is_whitespace(char):
-    """Checks whether `char` is a whitespace character."""
+    """判断是否是空白符. Checks whether `char` is a whitespace character."""
     # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
     if char == " " or char == "\t" or char == "\n" or char == "\r":
@@ -305,7 +305,7 @@ def _is_whitespace(char):
 
 
 def _is_control(char):
-    """Checks whether `char` is a control character."""
+    """判断是否是控制符. Checks whether `char` is a control character."""
     # These are technically control characters but we count them as whitespace
     # characters.
     if char == "\t" or char == "\n" or char == "\r":
@@ -317,7 +317,7 @@ def _is_control(char):
 
 
 def _is_punctuation(char):
-    """Checks whether `char` is a punctuation character."""
+    """判断是否是标点符号. Checks whether `char` is a punctuation character."""
     cp = ord(char)
     # We treat all non-letter/number ASCII as punctuation.
     # Characters such as "^", "$", and "`" are not in the Unicode
