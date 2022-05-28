@@ -650,7 +650,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         **kwargs,
     ):
         """
-        在新的语料上训练一个新模型.
+        在新的语料上训练一个新分词器.
         Trains a tokenizer on a new corpus with the same defaults (in terms of special tokens or tokenization pipeline)
         as the current one.
 

@@ -60,6 +60,7 @@ class Trie:
 
     def add(self, word: str):
         """
+        将单词添加到 trie 树中. 使用特殊的 key 即 `""` 来表示单词的结束符, 并将值设置为1.
         Passes over every char (utf-8 char) on word and recursively adds it to the internal `data` trie representation.
         The special key `""` is used to represent termination.
 
@@ -82,16 +83,21 @@ class Trie:
             # Prevent empty string
             return
         ref = self.data
+        # 将每个字母添加到 trie 树中
         for char in word:
             ref[char] = char in ref and ref[char] or {}
+            # 递归进下一步
             ref = ref[char]
+        # 在最后添加终止符, 并将值设置为 1
         ref[""] = 1
 
     def split(self, text: str) -> List[str]:
         """
+        将文本切分为单词列表
         Will look for the words added to the trie within `text`. Output is the original string splitted along the
         boundaries of the words found.
 
+        优先匹配最长的可能的单词.
         This trie will match the longest possible word first !
 
         Example:
@@ -108,6 +114,7 @@ class Trie:
         ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
+        # 索引是在单词之间的. 0 是最左边的, 1 就是在 h 和 e 之间. 5 就是在 o 的右边.
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
         # index 5 is right of the "o".
@@ -132,7 +139,9 @@ class Trie:
         # for loop
         skip = 0
         # Main loop, Giving this algorithm O(n) complexity
+        # 循环每个字符
         for current, current_char in enumerate(text):
+            # 如果已经处理过了, 就跳过
             if skip and current < skip:
                 # Prevents the lookahead for matching twice
                 # like extra_id_100 and id_100
@@ -147,8 +156,10 @@ class Trie:
             # this is a greedy algorithm, it will match on the first found token
             reset = False
 
+            # states 中已经有值, 说明已经有开头匹配到了
             # In this case, we already have partial matches (But unfinished)
             for start, trie_pointer in states.items():
+                # 如果是 "" 就表示, 已经匹配到了单词的结束符
                 if "" in trie_pointer:
                     # This is a final match, we need to reset and
                     # store the results in `offsets`.
@@ -173,32 +184,40 @@ class Trie:
                             # It wasn't updated yet so indices are current ones
                             lookahead_index = current
                             end = current
+                        # 下一个字符
                         next_char = text[lookahead_index] if lookahead_index < len(text) else None
+                        # 如果已经是一个终止
                         if "" in looktrie_pointer:
                             start = lookstart
                             end = lookahead_index
                             skip = lookahead_index
 
+                        # 当下一个字符还在 trie 中
                         while next_char in looktrie_pointer:
+                            # 又要开始递归了
                             looktrie_pointer = looktrie_pointer[next_char]
                             lookahead_index += 1
                             if "" in looktrie_pointer:
                                 start = lookstart
                                 end = lookahead_index
+                                # skip 表示应该跳过多少距离, 因为前面的已经都处理过了
                                 skip = lookahead_index
 
+                            # 直到长度到了 text 的末尾
                             if lookahead_index == len(text):
                                 # End of string
                                 break
                             next_char = text[lookahead_index]
                         # End lookahead
 
+                    # 找到最长的单词, 将 start 和 end 都添加进去
                     # Storing and resetting
                     offsets.append(start)
                     offsets.append(end)
                     reset = True
                     break
                 elif current_char in trie_pointer:
+                    # 更新 trie_pointer, 替换掉当前在 states[start] 中的值, 表示可以前进一步了
                     # The current character being looked at has a match within the trie
                     # update the pointer (it will be stored back into states later).
                     trie_pointer = trie_pointer[current_char]
@@ -207,6 +226,7 @@ class Trie:
                     # Partial matches got longer by one.
                     states[start] = trie_pointer
                 else:
+                    # 当前的字符不在 trie 中, 就要删除这个状态, 不能继续匹配了
                     # The new character has not match in the trie, we need
                     # to stop keeping track of this partial match.
                     # We can't do it directly within the loop because of how
@@ -216,16 +236,22 @@ class Trie:
             # Either clearing the full start (we found a real match)
             # Or clearing only the partial matches that didn't work.
             if reset:
+                # 前面已经找到一个单词了, 需要重置并重新开始
                 states = {}
             else:
+                # 当前字符串不在 trie 树中, 就是只匹配了个开头, 但是没有找到后续的, 组成不了一个单词
                 for start in to_remove:
                     del states[start]
 
+            # 如果当前字符在 trie 树的开头, 就添加进 states 中. current_char in self.data 就是判断是否是开头
+            # 因为所有的可能性都在第一层字典里
             # If this character is a starting character within the trie
             # start keeping track of this partial match.
             if current >= skip and current_char in self.data:
+                # 添加的 key 是当前的索引位置, value 是当前的字符在 trie 中的字典, 也就是包含了当前字符后面的所有的可能性
                 states[current] = self.data[current_char]
 
+        # 如果最后还有, 可能就是整个 text 是个单词了.
         # We have a cut at the end with states.
         for start, trie_pointer in states.items():
             if "" in trie_pointer:
@@ -244,6 +270,7 @@ class Trie:
         # We have all the offsets now, we just need to do the actual splitting.
         # We need to eventually add the first part of the string and the eventual
         # last part.
+        # 将最后的位置添加进去
         offsets.append(len(text))
         tokens = []
         start = 0
@@ -254,6 +281,7 @@ class Trie:
                 )
                 continue
             elif start == end:
+                # 跳过零长度的
                 # This might happen if there's a match at index 0
                 # we're also preventing zero-width cuts in case of two
                 # consecutive matches
@@ -319,8 +347,10 @@ def _insert_one_token_to_ordered_list(token_list: List[str], new_token: str):
     """
     Inserts one token to an ordered list if it does not already exist. Note: token_list must be sorted.
     """
+    # 返回二分插入的左边位置的索引
     insertion_idx = bisect.bisect_left(token_list, new_token)
     # Checks if new_token is already in the ordered token_list
+    # 如果已经存在了
     if insertion_idx < len(token_list) and token_list[insertion_idx] == new_token:
         # new_token is in token_list, don't add
         return
@@ -338,6 +368,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     Handle all the shared methods for tokenization and special tokens as well as methods downloading/caching/loading
     pretrained tokenizers as well as adding tokens to the vocabulary.
 
+    以统一的方式添加 token 的方法.
     This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
@@ -350,6 +381,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
+        # 构建一个 trie 树, 用来保存 token
         self.tokens_trie = Trie()
 
         self._decode_use_source_tokenizer = False
@@ -367,6 +399,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
+        获取添加的词汇
         Returns the added tokens in the vocabulary as a dictionary of token to index.
 
         Returns:
@@ -376,12 +409,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __len__(self):
         """
+        当前词汇表的长度, 包含原始词汇表的长度, 加上 added_tokens_encoder 的长度
         Size of the full vocabulary with the added tokens.
         """
         return self.vocab_size + len(self.added_tokens_encoder)
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
+        添加 tokens
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary.
 
@@ -407,14 +442,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
+        # 转成字符串
         new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
         for token in new_tokens:
+            # 这原本不应该发生的, 毕竟前面都已经调用过 str 函数了
             if not isinstance(token, str):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
+            # 如果不是特殊 token, 且开启了 do_lower_case
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
+            # 如果不是 unk_token, 第二个判读是说这个 token 不在词汇表中
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
@@ -424,23 +463,28 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
+        # 从当前的长度开始计数, encoder 是 token => index, decoder 是 index => token
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
 
+        # 添加到 unique_no_split_tokens 中
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
+            # 如果是特殊 token, 就全部添加
             if len(new_tokens) == 1:
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
             else:
                 self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(new_tokens)))
         else:
+            # 只添加 tokens_to_add 中的, 也就是跳过重复的 token
             # Or on the newly added tokens
             if len(tokens_to_add) == 1:
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
             else:
                 self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+        # 重新构建 trie 树
         self._create_trie(self.unique_no_split_tokens)
 
         return len(tokens_to_add)
@@ -479,6 +523,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def tokenize(self, text: TextInput, **kwargs) -> List[str]:
         """
+        将字符串转换 token 的列表
         Converts a string in a sequence of tokens, using the tokenizer.
 
         Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies
@@ -493,13 +538,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             `List[str]`: The list of tokens.
         """
+        # 特殊 token 中 string => AddedToken 的映射
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
         )
 
+        # 准备工作, 当前这个类没有特殊操作
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
+        # 如果有没用到的 kwargs, 打印并提示下
         if kwargs:
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
@@ -509,24 +557,34 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             escaped_special_toks = [
                 re.escape(s_tok) for s_tok in (self.unique_no_split_tokens + self.all_special_tokens)
             ]
+            # .+? 是非贪婪匹配
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
+            # 没看懂这是什么操作, 据说是将非特殊字符转换成小写的格式
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
+        # 变成 set
         no_split_token = set(self.unique_no_split_tokens)
+        # 使用 trie 树分割成单词的列表, trie 树只保存新添加的单词
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
+                # 尝试从特殊字符中获取
                 tok_extended = all_special_tokens_extended.get(token, None)
+                # 当前单词的左边和右边单词
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
+                # 如果是特殊字符
                 if isinstance(tok_extended, AddedToken):
+                    # 如果 AddedToken 有 rstrip 属性是 true, 就应该去掉右边那个单词的左侧空格
                     if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
+                        # 吃掉了右边单词的左侧空格
                         tokens[i + 1] = right.lstrip()
                     # Strip white spaces on the left
                     if tok_extended.lstrip and left:
+                        # 吃掉了左边单词的右侧空格
                         tokens[i - 1] = left.rstrip()  # Opposite here
                 else:
                     # We strip left and right by default
@@ -534,15 +592,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         tokens[i + 1] = right.lstrip()
                     if left:
                         tokens[i - 1] = left.rstrip()
+        # 已经去掉空格了
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:
             # Need to skip eventual empty (fully stripped) tokens
             if not token:
                 continue
+            # 如果在 no_split_token 中就直接添加
             if token in no_split_token:
                 tokenized_text.append(token)
             else:
+                # 否则还是要用内置的 tokenizer 重新分词一下
                 tokenized_text.extend(self._tokenize(token))
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
@@ -570,9 +631,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if tokens is None:
             return None
 
+        # 支持 str 或者序列
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
+        # 当然格式是不一样的
         ids = []
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
@@ -582,8 +645,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if token is None:
             return None
 
+        # 如果在新增的单词中, 就可以直接返回
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
+        # 当然又是未实现的, 在该类中
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -610,19 +675,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+        # 获取 input_ids
         def get_input_ids(text):
             if isinstance(text, str):
+                # 使用 tokenize 方法分词, 并使用 convert_tokens_to_ids 转成 ids
                 tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+                # 如果已经转换成单词列表了, 就不需要 tokenize 了
                 if is_split_into_words:
                     tokens = list(
+                        # 使用 chain 连接列表
                         itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
                     )
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
+                # 如果已经是列表了, 且里面是 int 类型, 就不需要操作了
                 return text
             else:
                 if is_split_into_words:
@@ -692,6 +762,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+        # 这个函数和上面的 get_input_ids 是一样的
         def get_input_ids(text):
             if isinstance(text, str):
                 tokens = self.tokenize(text, **kwargs)
@@ -720,6 +791,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
+            # 对每一个进行操作, 就是批量处理了
             if not isinstance(ids_or_pair_ids, (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
             elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
@@ -778,6 +850,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
 
         batch_outputs = {}
+        # 批量操作
         for first_ids, second_ids in batch_ids_pairs:
             outputs = self.prepare_for_model(
                 first_ids,
@@ -798,11 +871,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 verbose=verbose,
             )
 
+            # 组装成字典, value 是个数组
             for key, value in outputs.items():
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
 
+        # 填充
         batch_outputs = self.pad(
             batch_outputs,
             padding=padding_strategy.value,
@@ -843,6 +918,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
+        获取特殊 token 的 mask
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
@@ -857,6 +933,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
+        # 已经有特殊 tokens 了
         if already_has_special_tokens:
             if token_ids_1 is not None:
                 raise ValueError(
@@ -867,8 +944,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return super().get_special_tokens_mask(
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
+        # 没有, 就直接全部设置为 0
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
+    # 第一次看见重载
     @overload
     def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str:
         ...
@@ -881,6 +960,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
         """
+        将 ids 转换为 tokens, 支持单个或者列表
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
 
@@ -893,14 +973,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             `str` or `List[str]`: The decoded token(s).
         """
+        # 如果是单个 int
         if isinstance(ids, int):
             if ids in self.added_tokens_decoder:
                 return self.added_tokens_decoder[ids]
             else:
                 return self._convert_id_to_token(ids)
+        # 如果是列表
         tokens = []
         for index in ids:
             index = int(index)
+            # 是否跳过特殊 token
             if skip_special_tokens and index in self.all_special_ids:
                 continue
             if index in self.added_tokens_decoder:
@@ -923,6 +1006,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         spaces_between_special_tokens: bool = True,
         **kwargs
     ) -> str:
+        # 解码, 就是转成字符串
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
@@ -936,20 +1020,26 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if skip_special_tokens and token in self.all_special_ids:
                 continue
             if token in self.added_tokens_encoder:
+                # 如果已经有了, 就需要将 current_sub_text 转换成字符串然后添加进去
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
+                # 将当前 token 添加进去
                 sub_texts.append(token)
             else:
+                # 不在就添加进去
                 current_sub_text.append(token)
+        # 如果还有剩余的, 也要添加进去
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
 
+        # 选择不同的组合方式, 是否需要加空格
         if spaces_between_special_tokens:
             text = " ".join(sub_texts)
         else:
             text = "".join(sub_texts)
 
+        # 是否要清理
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text
