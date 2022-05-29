@@ -43,6 +43,7 @@ class cached_property(property):
         if self.fget is None:
             raise AttributeError("unreadable attribute")
         attr = "__cached_" + self.fget.__name__
+        # 优先从 obj 的属性中获取, 如果获取不到, 则调用 fget 获取, 并缓存在 obj 的属性中
         cached = getattr(obj, attr, None)
         if cached is None:
             cached = self.fget(obj)
@@ -130,6 +131,7 @@ def to_py_obj(obj):
 
 def to_numpy(obj):
     """
+    转换成 numpy 类型
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
     """
     if isinstance(obj, (dict, UserDict)):
@@ -148,6 +150,7 @@ def to_numpy(obj):
 
 class ModelOutput(OrderedDict):
     """
+    定义模型输出, 继承自有序字典
     Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
     tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
     python dictionary.
@@ -161,22 +164,26 @@ class ModelOutput(OrderedDict):
     """
 
     def __post_init__(self):
+        # 获取所有的字段
         class_fields = fields(self)
 
         # Safety and consistency checks
         if not len(class_fields):
             raise ValueError(f"{self.__class__.__name__} has no fields.")
+        # 除了第一个字段外, 都需要有默认值
         if not all(field.default is None for field in class_fields[1:]):
             raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
 
+        # 如果其他字段都是 None
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
                 iterator = first_field.items()
                 first_field_iterator = True
             else:
+                # 尝试迭代
                 try:
                     iterator = iter(first_field)
                     first_field_iterator = True
@@ -187,18 +194,23 @@ class ModelOutput(OrderedDict):
             # set the associated fields
             if first_field_iterator:
                 for element in iterator:
+                    # 每次迭代必须要有两个字段, 且第一个字段的类型是 str
                     if (
                         not isinstance(element, (list, tuple))
                         or not len(element) == 2
                         or not isinstance(element[0], str)
                     ):
                         break
+                    # 更新属性
                     setattr(self, element[0], element[1])
+                    # 如果不是 None, 就作为字典存储进去
                     if element[1] is not None:
                         self[element[0]] = element[1]
             elif first_field is not None:
+                # first_field 不可迭代, 且不是 None, 就直接存储进字典中
                 self[class_fields[0].name] = first_field
         else:
+            # 如果不是 None 的字段, 就作为字典的 key value 存储进去
             for field in class_fields:
                 v = getattr(self, field.name)
                 if v is not None:
@@ -221,12 +233,16 @@ class ModelOutput(OrderedDict):
             inner_dict = {k: v for (k, v) in self.items()}
             return inner_dict[k]
         else:
+            # 这个就是支持索引位置的
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
+        # 字典中只保存非 None 的值
         if name in self.keys() and value is not None:
+            # 要防止递归, 所以只能用 super() 的 __setitem__ 方法
             # Don't call self.__setitem__ to avoid recursion errors
             super().__setitem__(name, value)
+        # 属性可以直接设置
         super().__setattr__(name, value)
 
     def __setitem__(self, key, value):
@@ -237,6 +253,7 @@ class ModelOutput(OrderedDict):
 
     def to_tuple(self) -> Tuple[Any]:
         """
+        # 转换成 tuple, 使用的 keys 就表示是从字典中获取, 字典中又是不存 None 值的, 所以只返回有值的属性
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())

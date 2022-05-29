@@ -35,6 +35,7 @@ class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
+        # 根据不同框架, 调用不同的方法
         if return_tensors == "tf":
             return self.tf_call(features)
         elif return_tensors == "pt":

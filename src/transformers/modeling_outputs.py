@@ -23,6 +23,7 @@ from .utils import ModelOutput
 @dataclass
 class BaseModelOutput(ModelOutput):
     """
+    定义基础的输出
     Base class for model's outputs, with potential hidden states and attentions.
 
     Args:
@@ -40,9 +41,11 @@ class BaseModelOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-
+    # 最后一层的输出
     last_hidden_state: torch.FloatTensor = None
+    # 所有的输出
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    # 注意力的输出
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
