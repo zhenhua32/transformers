@@ -63,6 +63,7 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
 
+    # 使用不同类型的默认函数
     if return_tensors == "pt":
         return torch_default_data_collator(features)
     elif return_tensors == "tf":
@@ -102,25 +103,35 @@ class DefaultDataCollator(DataCollatorMixin):
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
 
+    # 转化成 dict 的列表
     if not isinstance(features[0], (dict, BatchEncoding)):
+        # 相当于 f.__dict__
         features = [vars(f) for f in features]
+    # 根据第一个元素来判断
     first = features[0]
+    # 最后返回一个字典
     batch = {}
 
     # Special handling for labels.
     # Ensure that tensor is created with the correct type
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
+        # 将 label 变成 python 对象
         label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+        # 根据 label 的类型使用不同的 torch 类型
         dtype = torch.long if isinstance(label, int) else torch.float
+        # 重新组合成 labels 字段
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
+        # 如果已经有 label_ids, 根据类型, 组装成 labels
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
+            # 另一种可能, first["label_ids"] 是个列表
             dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
+    # 然后将其他的列都堆叠起来
     # Handling of all other possible keys.
     # Again, we will use the first element to figure out which key/values are not None for this model.
     for k, v in first.items():
@@ -244,6 +255,7 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # 使用 tokenizer 的 pad 函数填充
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
@@ -251,6 +263,7 @@ class DataCollatorWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=self.return_tensors,
         )
+        # 去掉 label, 变成 labels
         if "label" in batch:
             batch["labels"] = batch["label"]
             del batch["label"]
@@ -301,8 +314,10 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def torch_call(self, features):
         import torch
 
+        # 获取标签
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        # 同样需要使用 tokenizer 填充
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
@@ -315,10 +330,13 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         if labels is None:
             return batch
 
+        # 序列长度
         sequence_length = torch.tensor(batch["input_ids"]).shape[1]
+        # 填充位置
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
             batch[label_name] = [
+                # 在右边加上 label 的 pad 值
                 list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
             ]
         else:
@@ -326,6 +344,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
                 [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
             ]
 
+        # 转换下 value 的类型
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
 
@@ -393,19 +412,22 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
 
 def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None):
-    """Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
+    """将 examples 转换成批次. Collate `examples` into a batch, using the information in `tokenizer` for padding if necessary."""
     import numpy as np
     import torch
 
     # Tensorize if necessary.
     if isinstance(examples[0], (list, tuple, np.ndarray)):
+        # 转换类型
         examples = [torch.tensor(e, dtype=torch.long) for e in examples]
 
+    # 第一个维度的长度
     length_of_first = examples[0].size(0)
 
     # Check if padding is necessary.
 
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
+    # 是否长度都相同, 且当有填充倍数时, 也符合填充倍数
     if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
 
@@ -417,10 +439,14 @@ def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
         )
 
     # Creating the full tensor and filling it with our data.
+    # 找出当前的最大长度
     max_length = max(x.size(0) for x in examples)
+    # 如果需要符合倍数关系
     if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
         max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    # 填充到指定形状
     result = examples[0].new_full([len(examples), max_length], tokenizer.pad_token_id)
+    # 然后根据不同的 padding_side 选择往哪里填上原本的额值
     for i, example in enumerate(examples):
         if tokenizer.padding_side == "right":
             result[i, : example.shape[0]] = example
@@ -606,6 +632,7 @@ class DataCollatorForSeq2Seq:
 @dataclass
 class DataCollatorForLanguageModeling(DataCollatorMixin):
     """
+    用于语言模型的. 输入会被动态填充到当前最长的序列长度.
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
     are not all of the same length.
 
@@ -639,6 +666,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     return_tensors: str = "pt"
 
     def __post_init__(self):
+        # 后处理验证
         if self.mlm and self.tokenizer.mask_token is None:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
@@ -728,18 +756,22 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         if isinstance(examples[0], (dict, BatchEncoding)):
             batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
+            # 直接构建
             batch = {
                 "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
             }
 
         # If special token mask has been preprocessed, pop it from the dict.
+        # 如果有特殊的 token mask
         special_tokens_mask = batch.pop("special_tokens_mask", None)
+        # 对于掩码语言模型
         if self.mlm:
             batch["input_ids"], batch["labels"] = self.torch_mask_tokens(
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
             labels = batch["input_ids"].clone()
+            # 如果有填充, 就需要将这些填充位置设置成 -100
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             batch["labels"] = labels
@@ -753,8 +785,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         labels = inputs.clone()
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        # 概率矩阵, 每个值都是 self.mlm_probability
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
         if special_tokens_mask is None:
+            # 获取特殊 token 的掩码
             special_tokens_mask = [
                 self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
             ]
@@ -762,19 +796,26 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         else:
             special_tokens_mask = special_tokens_mask.bool()
 
+        # 概率矩阵先填充上, 把那些是特殊 token 的位置都变成 0
         probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+        # 从伯努利分布中进行二元采样, 并转换成 bool 格式
         masked_indices = torch.bernoulli(probability_matrix).bool()
+        # 反向操作, 将这些值都是为 -100. -100 是没有标签的位置, 和前面填充时是一致的
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
+        # 80% 的概率替换成 [MASK]
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
+        # 10% 的概率替换成随机的单词
         # 10% of the time, we replace masked input tokens with random word
         indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        # 替换成随机的单词
         random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
+        # 剩下 10% 的概率保持不变
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
