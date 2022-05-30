@@ -78,6 +78,8 @@ _init_weights = True
 @contextmanager
 def no_init_weights(_enable=True):
     """
+    使用 @contextmanager 可以快速实现一个 with 语句.
+    就是在 with 语句块中, 先将 _init_weights 设置为 False, 然后退出的时候重新设置为 True.
     Context manager to globally disable weight initialization to speed up loading large models.
 
     TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
@@ -91,6 +93,7 @@ def no_init_weights(_enable=True):
         _init_weights = True
 
 
+# Identity 是一个占位标识符模型, 原样输入, 原样输出
 try:
     from torch.nn import Identity
 except ImportError:
@@ -106,6 +109,7 @@ except ImportError:
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """获取参数所在的设备"""
     try:
         return next(parameter.parameters()).device
     except StopIteration:
@@ -117,10 +121,12 @@ def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUti
 
         gen = parameter._named_members(get_members_fn=find_tensor_attributes)
         first_tuple = next(gen)
+        # 这获取的 first_tuple 是前面的 (k, v), 所以要取出索引为 1 的
         return first_tuple[1].device
 
 
 def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    """获取参数的类型, 即 dtype, 方法同上"""
     try:
         return next(parameter.parameters()).dtype
     except StopIteration:
@@ -168,6 +174,7 @@ def convert_file_size_to_int(size: Union[int, str]):
 
 def dtype_byte_size(dtype):
     """
+    根据 dtype 获取字节大小
     Returns the size (in bytes) occupied by one parameter of type `dtype`.
 
     Example:
@@ -188,6 +195,7 @@ def dtype_byte_size(dtype):
 
 def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[int, str] = "10GB"):
     """
+    将第一个 model state 字典分割成多个检查点, 让每个检查点的大小不会超出指定的限制
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
     given size.
 
@@ -209,6 +217,7 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
             The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
             (like `"5MB"`).
     """
+    # 获取字节数
     max_shard_size = convert_file_size_to_int(max_shard_size)
 
     sharded_state_dicts = []
@@ -217,8 +226,10 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
     total_size = 0
 
     for key, weight in state_dict.items():
+        # 元素的个数 * 每个元素的字节数
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
+        # 如果大小将要超出了, 就放到 sharded_state_dicts 里, 然后重新开始计数
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
             sharded_state_dicts.append(current_block)
@@ -229,9 +240,11 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
         current_block_size += weight_size
         total_size += weight_size
 
+    # 将最后剩余的也加进去
     # Add the last block
     sharded_state_dicts.append(current_block)
 
+    # 不需要分割, 会直接返回
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
         return {WEIGHTS_NAME: sharded_state_dicts[0]}, None
@@ -240,14 +253,17 @@ def shard_checkpoint(state_dict: Dict[str, torch.Tensor], max_shard_size: Union[
     weight_map = {}
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
+        # 命名为 1-5.bin 之类的结尾
         shard_file = WEIGHTS_NAME.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
         shards[shard_file] = shard
         for key in shard.keys():
+            # 权重的参数名 => 文件名
             weight_map[key] = shard_file
 
     # Add the metadata
     metadata = {"total_size": total_size}
     index = {"metadata": metadata, "weight_map": weight_map}
+    # 会返回一个 shards 保存了文件名对应的分片. 一个 index 包含 metadata 信息和 weight_map 是每个权重对应的文件名
     return shards, index
 
 
@@ -274,9 +290,11 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
+    # index 就是 shard_checkpoint 函数返回的 index
     with open(index_filename, "r") as f:
         index = json.loads(f.read())
 
+    # 分片的文件名
     shard_filenames = sorted(list(set(index["weight_map"].values())))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
@@ -325,9 +343,11 @@ def get_checkpoint_shard_files(
 
 def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
+    加载 pytorch 的检查点
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
     try:
+        # 就是使用 load 加载, 然后使用 map_location 指定加载位置, 加载到 cpu 上
         return torch.load(checkpoint_file, map_location="cpu")
     except Exception as e:
         try:
@@ -352,6 +372,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+    """转换成新的格式"""
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
