@@ -385,6 +385,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
+    # 替换掉名字
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
@@ -396,6 +397,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
     error_msgs = []
 
+    # 不复制子孙, 所以需要递归
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
     def load(module: nn.Module, prefix=""):
@@ -411,8 +413,10 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                 if torch.distributed.get_rank() == 0:
                     module._load_from_state_dict(*args)
         else:
+            # 加载权重参数
             module._load_from_state_dict(*args)
 
+        # 递归
         for name, child in module._modules.items():
             if child is not None:
                 load(child, prefix + name + ".")
@@ -428,6 +432,7 @@ def find_submodule_and_param_name(model, long_key, start_prefix):
     from the start of the key
     """
 
+    # 去掉第一个
     if len(start_prefix) > 0 and long_key.startswith(start_prefix):
         long_key = ".".join(long_key.split(".")[1:])
 
@@ -436,6 +441,7 @@ def find_submodule_and_param_name(model, long_key, start_prefix):
     while len(split_key) > 1:
         if hasattr(submodule, split_key[0]):
             submodule = getattr(submodule, split_key[0])
+            # 从前面开始删除, 因为查找也是从前面开始找的
             del split_key[0]
         else:
             submodule = None
@@ -518,6 +524,7 @@ class ModuleUtilsMixin:
 
     @staticmethod
     def _hook_rss_memory_pre_forward(module, *args, **kwargs):
+        # 在调用 forward 之前占用的 rss 内存大小. RSS（Resident Set Size）
         try:
             import psutil
         except (ImportError):
@@ -530,6 +537,7 @@ class ModuleUtilsMixin:
 
     @staticmethod
     def _hook_rss_memory_post_forward(module, *args, **kwargs):
+        # 在调用 forward 后占用的 rss 内存大小
         try:
             import psutil
         except (ImportError):
@@ -580,6 +588,7 @@ class ModuleUtilsMixin:
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
+        反转 attention 掩码
         Invert an attention mask (e.g., switches 0. and 1.).
 
         Args:
@@ -599,6 +608,7 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
 
+        # 没看懂啊
         if self.dtype == torch.float16:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
         elif self.dtype in [torch.bfloat16, torch.float32]:
@@ -617,7 +627,9 @@ class ModuleUtilsMixin:
         # in case past_key_values are used we need to add a prefix ones mask to the causal mask
         # causal and attention masks must have same type with pytorch version < 1.3
         causal_mask = causal_mask.to(attention_mask.dtype)
+        # causal_mask.shape 是 (batch_size, seq_length, seq_length)
 
+        # 如果序列长度比 attention_mask 的长度小
         if causal_mask.shape[1] < attention_mask.shape[1]:
             prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
             causal_mask = torch.cat(
@@ -625,7 +637,7 @@ class ModuleUtilsMixin:
                     torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
                     causal_mask,
                 ],
-                axis=-1,
+                axis=-1,  # 在最后一个维度增加
             )
 
         extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
@@ -665,6 +677,7 @@ class ModuleUtilsMixin:
                 f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
+        # 原来是在使用 softmax 后是一样的效果
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
@@ -714,6 +727,7 @@ class ModuleUtilsMixin:
 
     def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
+        获取参数数量
         Get number of (optionally, trainable or non-embeddings) parameters in the module.
 
         Args:
@@ -810,9 +824,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
+    # 配置类
     config_class = None
+    # 基础模型前缀
     base_model_prefix = ""
+    # 主要输入的名字
     main_input_name = "input_ids"
+    # 自动类
     _auto_class = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
@@ -826,7 +844,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # trained, but which are either deterministic or tied variables)
     _keys_to_ignore_on_save = None
 
+    # 是否是并行的
     is_parallelizable = False
+    # 支持梯度检查点
     supports_gradient_checkpointing = False
 
     @property

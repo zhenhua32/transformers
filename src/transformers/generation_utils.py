@@ -378,6 +378,7 @@ BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOu
 
 class GenerationMixin:
     """
+    用于自回归文本生成的
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
     The class exposes [`~generation_utils.GenerationMixin.generate`], which can be used for:
