@@ -877,6 +877,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def post_init(self):
         """
+        初始化的最后一步, 通常用于初始化权重
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
         """
@@ -905,6 +906,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+        # 实例化模型
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -916,6 +918,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model = cls(config, **kwargs)
 
+        # 重新修改为原来的默认 dtype
         # restore default dtype if it was modified
         if dtype_orig is not None:
             torch.set_default_dtype(dtype_orig)
@@ -945,6 +948,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
+        # 更新并返回默认的 dtype
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
         return dtype_orig
@@ -958,11 +962,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def get_input_embeddings(self) -> nn.Module:
         """
+        获取模型的输入嵌入
         Returns the model's input embeddings.
 
         Returns:
             `nn.Module`: A torch module mapping vocabulary to hidden states.
         """
+        # 感觉有点像是递归调用
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
             return base_model.get_input_embeddings()
@@ -1005,7 +1011,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights instead.
         """
         if getattr(self.config, "tie_word_embeddings", True):
+            # 获取输出嵌入
             output_embeddings = self.get_output_embeddings()
+            # 如果存在的话, 将输出嵌入和输入嵌入进行绑定
             if output_embeddings is not None:
                 self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
@@ -1014,6 +1022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
+        # 对所有子模块调用
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
@@ -1021,11 +1030,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
+        # 编解码器的类别应该一致
         if decoder.__class__ != encoder.__class__:
             logger.info(
                 f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder weights are correctly initialized."
             )
 
+        # 将编码器和解码器进行递归绑定
         def tie_encoder_to_decoder_recursively(
             decoder_pointer: nn.Module,
             encoder_pointer: nn.Module,
@@ -1033,9 +1044,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             uninitialized_encoder_weights: List[str],
             depth=0,
         ):
+            # 检查类型
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
             ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            # 核心的过程
+            # 将 encoder 的 weights 和 bias 变成和 decoder 一致, 直接就返回了
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -1044,6 +1058,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     encoder_pointer.bias = decoder_pointer.bias
                 return
 
+            # 这些都是没有 weight 属性的
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
@@ -1073,6 +1088,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                     else:
                         decoder_name = encoder_name = name
+                    # 前面就是获取 decoder_name 和 encoder_name, 然后递归
                     tie_encoder_to_decoder_recursively(
                         decoder_modules[decoder_name],
                         encoder_modules[encoder_name],
@@ -1082,6 +1098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     all_encoder_weights.remove(module_name + "/" + encoder_name)
 
+                # 剩余的未初始化的 encoder 的权重
                 uninitialized_encoder_weights += list(all_encoder_weights)
 
         # tie weights recursively
@@ -1093,11 +1110,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
         """Tie or clone module weights depending of whether we are using TorchScript or not"""
+        # 克隆或者绑定权重
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
         else:
             output_embeddings.weight = input_embeddings.weight
 
+        # 填充 bias
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
@@ -1113,6 +1132,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
+        缩放嵌入矩阵
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
 
         Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
@@ -1130,6 +1150,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return model_embeds
 
+        # 更新词汇表大小
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
         self.vocab_size = new_num_tokens
@@ -1141,7 +1162,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.get_input_embeddings()
+        # 主要就是调用这个方法, 生成一个新的输入嵌入
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        # 然后更新掉
         self.set_input_embeddings(new_embeddings)
 
         # if word embeddings are not tied, make sure that lm head is resized as well
@@ -1156,6 +1179,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
     ) -> nn.Embedding:
         """
+        建立一个新的缩放后的嵌入矩阵. 增加 size 会添加新的随机向量, 缩小 size 会删除后面的随机向量
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
 
@@ -1173,9 +1197,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
             `new_num_tokens` is `None`
         """
+        # 相当于不操作
         if new_num_tokens is None:
             return old_embeddings
 
+        # 获取原始的 token 数, 和嵌入维度
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -1184,15 +1210,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
+        # 词汇表数量相同, 也是不操作
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
+        # 怎么到现在来检查类型了?
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
                 f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
 
+        # 创建一个新的维度
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
         new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
@@ -1211,6 +1240,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if torch.distributed.get_rank() == 0:
                     new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
         else:
+            # 前 n 个保持一致
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
@@ -1360,6 +1390,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+        # apply 方法将函数递归的用于每个子模块中
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
     def gradient_checkpointing_disable(self):
