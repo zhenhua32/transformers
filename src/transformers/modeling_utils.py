@@ -1279,6 +1279,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
                 )
         else:
+            # transposed 决定是否需要转置. 要保证第一个维度是 token 数, 第二个维度是嵌入维度
             old_num_tokens, old_lm_head_dim = (
                 old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
             )
@@ -1293,6 +1294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # Build new lm head
+        # 但是没想到新建立的 shape 是 (old_lm_head_dim, new_num_tokens), 当没有转置时, 恰好是相反的
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
         new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
@@ -1326,6 +1328,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             # Copy old lm head weights to new lm head
             if not transposed:
+                # 这里感觉又是对的, 第一个维度是词汇表大小, 第二个维度是嵌入维度
                 new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
             else:
                 new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
@@ -1356,6 +1359,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.config.pruned_heads:
             self.prune_heads(self.config.pruned_heads)
 
+        # 这个是全局变量
         if _init_weights:
             # Initialize weights
             self.apply(self._init_weights)
@@ -1366,6 +1370,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
+        修剪 heads
         Prunes heads of the base model.
 
         Arguments:
@@ -1424,6 +1429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         **kwargs,
     ):
         """
+        保存模型
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `[`~PreTrainedModel.from_pretrained`]` class method.
 
@@ -1466,6 +1472,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        # 必须提供一个目录
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -1476,6 +1483,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         os.makedirs(save_directory, exist_ok=True)
 
+        # 解包模型, 当使用分布式框架时, 会嵌套模型
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
 
@@ -2864,6 +2872,7 @@ class SequenceSummary(nn.Module):
 
 def unwrap_model(model: nn.Module) -> nn.Module:
     """
+    递归解包模型, 就是不断的取出 model.module
     Recursively unwraps a model from potential containers (as used in distributed training).
 
     Args:
