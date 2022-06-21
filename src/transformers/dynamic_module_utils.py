@@ -416,6 +416,7 @@ def custom_object_save(obj, folder, config=None):
             "the Hub."
         )
 
+    # 跳过, 没细看
     def _set_auto_map_in_config(_config):
         module_name = obj.__class__.__module__
         last_module = module_name.split(".")[-1]
@@ -447,6 +448,7 @@ def custom_object_save(obj, folder, config=None):
         else:
             _config.auto_map = {obj._auto_class: full_name}
 
+    # 添加模型相关的配置信息到配置文件中
     # Add object class to the config auto_map
     if isinstance(config, (list, tuple)):
         for cfg in config:
@@ -454,11 +456,13 @@ def custom_object_save(obj, folder, config=None):
     elif config is not None:
         _set_auto_map_in_config(config)
 
+    # 获取模型所在的文件, 并复制到指定的目录下
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
     shutil.copy(object_file, dest_file)
 
+    # 获取其他需要的相对导入的文件
     # Gather all relative imports recursively and make sure they are copied as well.
     for needed_file in get_relative_import_files(object_file):
         dest_file = Path(folder) / (Path(needed_file).name)

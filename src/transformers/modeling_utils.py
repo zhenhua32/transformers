@@ -1005,11 +1005,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def tie_weights(self):
         """
+        将 input 嵌入和 output 嵌入的权重绑定.
         Tie the weights between the input embeddings and the output embeddings.
 
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
+        # 词嵌入
         if getattr(self.config, "tie_word_embeddings", True):
             # 获取输出嵌入
             output_embeddings = self.get_output_embeddings()
@@ -1017,6 +1019,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if output_embeddings is not None:
                 self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
+        # 编码器解码器
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
@@ -1487,14 +1490,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
 
+        # 保存参数类型
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
         model_to_save.config.torch_dtype = str(dtype).split(".")[1]
 
+        # 保存模型的类名
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
+        # 如果是一个自定义的模型, 需要复制模型的定义文件
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -1508,21 +1514,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if state_dict is None:
             state_dict = model_to_save.state_dict()
 
+        # 忽略不需要保存的 key
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
 
+        # 模型太大的话, 会切割保存
         # Shard the model if it is too big.
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
 
+        # 移除以 pytorch_model 开头的文件
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
             if filename.startswith(WEIGHTS_NAME[:-4]) and os.path.isfile(full_filename):
                 os.remove(full_filename)
 
+        # 保存文件, save_function 默认是 torch.save
         # Save the model
         for shard_file, shard in shards.items():
             save_function(shard, os.path.join(save_directory, shard_file))
@@ -1717,6 +1727,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Currently, it can't handle deepspeed ZeRO stage 3 and ignores loading errors
 
         """
+        # 从 kwargs 中获取一大堆参数
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1743,12 +1754,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
+        # 使用离线模式
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
+            # 加载配置文件
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
@@ -1767,6 +1780,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
+        # 是否是分片保存的模型
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
         is_sharded = False
@@ -1774,6 +1788,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Load model
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+            # 如果是个目录
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
@@ -1788,9 +1803,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                    # 分片的模型
                     # Load from a sharded PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                     is_sharded = True
+                # 到这个阶段了, 还没有找到文件, 就要抛出异常了
                 # At this stage we don't have a weight file so we will raise an error.
                 elif os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
@@ -1829,6 +1846,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     filename = WEIGHTS_NAME
 
+                # 从 hf 的仓库获取
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=filename,
@@ -1836,6 +1854,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     mirror=mirror,
                 )
 
+            # 上面的步骤就是为了获取 archive_file 文件
             try:
                 # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
@@ -1936,6 +1955,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"{FLAX_WEIGHTS_NAME}."
                 )
 
+            # 打印下日志, 从哪里加载权重文件
             if resolved_archive_file == archive_file:
                 logger.info(f"loading weights file {archive_file}")
             else:
@@ -1998,6 +2018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         config.name_or_path = pretrained_model_name_or_path
 
+        # 初始化模型实例
         # Instantiate model.
         if is_deepspeed_zero3_enabled():
             import deepspeed
