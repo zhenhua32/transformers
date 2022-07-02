@@ -107,7 +107,9 @@ BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
+    """加载 tf checkpoints 的权重.
+    Load tf checkpoints in a pytorch model.
+    """
     try:
         import re
 
@@ -122,16 +124,20 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
+    # 获取 key 和 shape 的元组
     init_vars = tf.train.list_variables(tf_path)
+    # 分开使用权重名和值
     names = []
     arrays = []
     for name, shape in init_vars:
         logger.info(f"Loading TF weight {name} with shape {shape}")
+        # 加载权重
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
 
     for name, array in zip(names, arrays):
+        # 切分成名字数组
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
@@ -162,12 +168,15 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
                     logger.info(f"Skipping {'/'.join(name)}")
                     continue
             if len(scope_names) >= 2:
+                # 第一个位置是数字
                 num = int(scope_names[1])
                 pointer = pointer[num]
+        # 最后11位刚好等于
         if m_name[-11:] == "_embeddings":
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
             array = np.transpose(array)
+        # 如果 shape 不相同, 就报错
         try:
             if pointer.shape != array.shape:
                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
@@ -175,6 +184,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
             e.args += (pointer.shape, array.shape)
             raise
         logger.info(f"Initialize PyTorch weight {name}")
+        # 将权重赋值给 pointer
         pointer.data = torch.from_numpy(array)
     return model
 
@@ -726,6 +736,7 @@ class BertPreTrainingHeads(nn.Module):
 
 class BertPreTrainedModel(PreTrainedModel):
     """
+    只是个抽象类.
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
@@ -863,7 +874,7 @@ BERT_INPUTS_DOCSTRING = r"""
 )
 class BertModel(BertPreTrainedModel):
     """
-
+    这个模型既可以作为编码器, 也可以作为解码器.
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
@@ -878,11 +889,15 @@ class BertModel(BertPreTrainedModel):
         super().__init__(config)
         self.config = config
 
+        # 嵌入层
         self.embeddings = BertEmbeddings(config)
+        # 编码器
         self.encoder = BertEncoder(config)
 
+        # 池化层
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
+        # 最后处理初始化
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -894,6 +909,7 @@ class BertModel(BertPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune):
         """
+        修剪模型的头.
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
         """
@@ -924,6 +940,7 @@ class BertModel(BertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
+        前向传播.
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -934,6 +951,7 @@ class BertModel(BertPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            包含预先计算的注意力块的隐藏状态的键值对. 用于加速解码.
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -943,17 +961,22 @@ class BertModel(BertPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
+        # 是否应该输出注意力的结果
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # 是否应该输出隐藏层的结果
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        # 是否应该以字典的形式返回结果
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # 是否使用缓存
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
             use_cache = False
 
+        # 获取输入的维度
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -963,27 +986,34 @@ class BertModel(BertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        # 第一个维度是batch_size, 第二个维度是序列长度
         batch_size, seq_length = input_shape
+        # 所在的设备
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
+            # 不知道为什么要套两层的括号, 第一个参数是元组, 应该是要一层括号就行了
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
+                # 如果 self.embeddings 包含 token_type_ids 属性, 则使用它
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                # expand 在单一维度上进行扩展, 也就是复制. 也即是第一个维度 batch_size
                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
+                # 初始化为 0
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
+        # 如果是解码器, 且提供了编码器的隐藏层状态
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -991,6 +1021,7 @@ class BertModel(BertPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            # 反转注意力掩码
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -1002,6 +1033,7 @@ class BertModel(BertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        # 获取嵌入层的输出
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1009,6 +1041,7 @@ class BertModel(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        # 获取编码器的输出
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1021,10 +1054,13 @@ class BertModel(BertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        # 序列输出就是编码器输出的第一个
         sequence_output = encoder_outputs[0]
+        # 池化层的输出
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
+            # 返回元组的格式, encoder_outputs 要从 [1:] 开始取, 是因为 [0] 是 sequence_output
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(

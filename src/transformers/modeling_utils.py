@@ -621,8 +621,13 @@ class ModuleUtilsMixin:
         return encoder_extended_attention_mask
 
     def create_extended_attention_mask_for_decoder(self, input_shape, attention_mask, device):
+        """
+        为解码器创建一个扩展的注意力掩码
+        """
         batch_size, seq_length = input_shape
+        # 序列 id
         seq_ids = torch.arange(seq_length, device=device)
+        # 因果掩码, 最后的形状是 (batch_size, seq_length, seq_length), 左下三角形是 True, 右上的三角形是 False
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
         # in case past_key_values are used we need to add a prefix ones mask to the causal mask
         # causal and attention masks must have same type with pytorch version < 1.3
@@ -645,6 +650,7 @@ class ModuleUtilsMixin:
 
     def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int], device: device) -> Tensor:
         """
+        制作可广播的注意力和因果掩码, 所以未来的和掩码的 token 会被忽略掉.
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
         Arguments:
@@ -658,6 +664,7 @@ class ModuleUtilsMixin:
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
+        # 将三个维度的扩展到四个维度上
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -667,17 +674,19 @@ class ModuleUtilsMixin:
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
+                # 如果是解码器, 要增加一个因果掩码
                 extended_attention_mask = self.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )
             else:
+                # 将两个维度的扩展到四个维度上
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
                 f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
-        # 原来是在使用 softmax 后是一样的效果
+        # 原来是在使用 softmax 后是一样的效果, 将需要掩码的 token 的值设置为 -10000
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
@@ -691,6 +700,7 @@ class ModuleUtilsMixin:
         self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
     ) -> Tensor:
         """
+        获取 head 掩码
         Prepare the head mask if needed.
 
         Args:
@@ -708,6 +718,7 @@ class ModuleUtilsMixin:
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
             if is_attention_chunked is True:
+                # 最后面再加一个维度
                 head_mask = head_mask.unsqueeze(-1)
         else:
             head_mask = [None] * num_hidden_layers
