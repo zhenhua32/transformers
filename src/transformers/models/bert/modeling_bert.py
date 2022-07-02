@@ -570,9 +570,13 @@ class BertLayer(nn.Module):
 
 
 class BertEncoder(nn.Module):
+    """
+    bert 编码器
+    """
     def __init__(self, config):
         super().__init__()
         self.config = config
+        # 构建了 num_hidden_layers 层数的 BertLayer
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -589,26 +593,34 @@ class BertEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        # 隐藏层的状态
         all_hidden_states = () if output_hidden_states else None
+        # 自注意力
         all_self_attentions = () if output_attentions else None
+        # 交叉注意力
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        # 下一个解码器的缓存
         next_decoder_cache = () if use_cache else None
+        # 对每一个 BertLayer 层
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
+            # 当前层的头掩码
             layer_head_mask = head_mask[i] if head_mask is not None else None
+            # 当前层的 past_key_value
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
+                # 梯度检查点, 且在训练模式下
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
+                # 创建一个自定义的前向传播函数
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, past_key_value, output_attentions)
@@ -624,6 +636,7 @@ class BertEncoder(nn.Module):
                     encoder_attention_mask,
                 )
             else:
+                # 正常状态, 调用每个层的前向传播
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -634,18 +647,22 @@ class BertEncoder(nn.Module):
                     output_attentions,
                 )
 
+            # 新的隐藏层就是输出的第一个元素. 也就是一层层传播下去额
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
+                # 第2个位置是自注意力, 第3个位置是交叉注意力
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
+        # 经过上面的循环之后, 最后一个隐藏层的状态
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
+            # 会过滤掉空的
             return tuple(
                 v
                 for v in [
