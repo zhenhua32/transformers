@@ -266,18 +266,26 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
+    """
+    bert 的自注意力层
+    """
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
+        # 需要 hidden_size 是 num_attention_heads 的倍数
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
 
+        # 注意力的头数
         self.num_attention_heads = config.num_attention_heads
+        # 每个头的大小
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        # 总的头大小
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
+        # 三个线性层
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
@@ -286,15 +294,20 @@ class BertSelfAttention(nn.Module):
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
+        # 相对位置嵌入
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
+            # 距离嵌入
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
+        # 是否是解码器
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
+        # 去掉最后一个维度, 替换为 num_attention_heads 和 attention_head_size. 估计是刚好等于 all_head_size, 也就是 hidden_size
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
+        # 然后就调换了第二个维度和第三个维度的位置
         return x.permute(0, 2, 1, 3)
 
     def forward(
@@ -307,43 +320,54 @@ class BertSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        # query 层在 hidden_states 上调用
         mixed_query_layer = self.query(hidden_states)
 
+        # 如果有 encoder_hidden_states, 就是交叉注意力
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
         if is_cross_attention and past_key_value is not None:
+            # 重用 key, value 和编码器的注意力掩码
             # reuse k,v, cross_attentions
             key_layer = past_key_value[0]
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
+            # 如果是交叉注意力, 分别调用 key 和 value, 在编码器的隐藏层状态上调用
             key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
+            # 有 past_key_value 就在隐藏层上调用 key 和 value
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
+            # 组合, 在第 2 个维度上增加
             key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
             value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
+            # 剩下的情况, 就在隐藏层上调用 key 和 value
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         if self.is_decoder:
+            # 如果是解码器, 就将 key_layer 和 value_layer 重新组合成 past_key_value
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
+            # uni-directional 是单向的
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # bi-directional 双向的
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
+        # 注意力分数, 就是 query_layer 和 key_layer 的矩阵乘积
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
@@ -363,11 +387,13 @@ class BertSelfAttention(nn.Module):
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
+        # 除以主力头数的平方根
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
+        # 使用 softmax 变成概率
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
@@ -379,6 +405,7 @@ class BertSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
+        # 上下文层, 就是注意力的概率 和 value_layer 的矩阵乘积
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -387,6 +414,7 @@ class BertSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
+        # 解码器要多返回一个 past_key_value
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
@@ -456,9 +484,14 @@ class BertAttention(nn.Module):
 
 
 class BertIntermediate(nn.Module):
+    """
+    定义一个线性层
+    """
     def __init__(self, config):
         super().__init__()
+        # 定义一个线性层
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        # 激活函数
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -471,6 +504,9 @@ class BertIntermediate(nn.Module):
 
 
 class BertOutput(nn.Module):
+    """
+    定义 bert 的输出, 也是一个线性层
+    """
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -485,17 +521,26 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
+    """
+    一个 bert 层
+    """
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
+        # 注意力
         self.attention = BertAttention(config)
+        # 是否是解码器
         self.is_decoder = config.is_decoder
+        # 是否添加交叉注意力
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
+            # 交叉注意力必须用于解码器
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            # 定义交叉注意力
             self.crossattention = BertAttention(config, position_embedding_type="absolute")
+        # 中间的
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
@@ -509,8 +554,10 @@ class BertLayer(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        # 在 past_key_value 的前两个位置
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # 自注意力输出
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -529,13 +576,16 @@ class BertLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
+            # 如果是解码器, 且传了 encoder_hidden_states, 必须开启交叉注意力
             if not hasattr(self, "crossattention"):
                 raise ValueError(
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
+            # past_key_value 的后两个位置
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            # 交叉注意力的输出
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -552,11 +602,13 @@ class BertLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
+        # 层的输出
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
 
+        # 如果是解码器, 需要返回 present_key_value
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
@@ -564,6 +616,7 @@ class BertLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output):
+        # 先经过中间层, 然后经过 output 层
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
