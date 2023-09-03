@@ -34,6 +34,7 @@ else:
     LlamaTokenizer = None
 
 logger = logging.get_logger(__name__)
+# 词汇表有两种名字, tokenizer.model 和 tokenizer.json
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 B_INST, E_INST = "[INST]", "[/INST]"
@@ -52,6 +53,7 @@ correct. If you don't know the answer to a question, please don't share false in
 class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
+    看看快速版的分词器是怎么使用的
 
     This uses notably ByteFallback and no normalization.
 
@@ -96,8 +98,10 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    # 慢速版本
     slow_tokenizer_class = LlamaTokenizer
     padding_side = "left"
+    # 输入有两个字段
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -113,6 +117,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         use_default_system_prompt=True,
         **kwargs,
     ):
+        # 调用父类的初始化方法
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -131,10 +136,14 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
+        """
+        是否能保存词表, 如果有 vocab_file 文件就行
+        """
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def update_post_processor(self):
         """
+        更新后处理器
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
         """
         bos = self.bos_token
@@ -143,28 +152,34 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos = self.eos_token
         eos_token_id = self.eos_token_id
 
+        # 这个是不是和转换器里很相似
         single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') * self.add_eos_token}"
         pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') * self.add_eos_token}"
 
+        # 添加特殊 token
         special_tokens = []
         if self.add_bos_token:
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
+        # 更新 tokenizer 的后处理器
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
 
     @property
     def add_eos_token(self):
+        # 是否添加结束 token
         return self._add_eos_token
 
     @property
     def add_bos_token(self):
+        # 是否添加开始 token
         return self._add_bos_token
 
     @add_eos_token.setter
     def add_eos_token(self, value):
+        # 每次更新后都需要更新 post_processor
         self._add_eos_token = value
         self.update_post_processor()
 
@@ -174,6 +189,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.update_post_processor()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        """
+        看看这个保存词表的操作
+        """
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -183,10 +201,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
+        # 保存成 tokenizer.model 文件. 实际也不是保存, 就是复制下文件
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
+        # 就是复制了下文件
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
@@ -194,6 +214,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     def _build_conversation_input_ids(self, conversation: "Conversation"):
         """Builds the input ids for a conversation.
+        TODO: 还没看
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
