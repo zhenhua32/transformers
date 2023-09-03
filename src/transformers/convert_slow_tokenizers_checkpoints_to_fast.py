@@ -35,6 +35,7 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
     if tokenizer_name is not None and tokenizer_name not in TOKENIZER_CLASSES:
         raise ValueError(f"Unrecognized tokenizer name, should be one of {list(TOKENIZER_CLASSES.keys())}.")
 
+    # 这个看起来是批量转换的
     if tokenizer_name is None:
         tokenizer_names = TOKENIZER_CLASSES
     else:
@@ -42,10 +43,14 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
 
     logger.info(f"Loading tokenizer classes: {tokenizer_names}")
 
+    # 对于每个分词器名字
     for tokenizer_name in tokenizer_names:
+        # 获取快速的分词器类
         tokenizer_class = TOKENIZER_CLASSES[tokenizer_name]
 
+        # 固定要加前缀
         add_prefix = True
+        # 获取检查点名字列表
         if checkpoint_name is None:
             checkpoint_names = list(tokenizer_class.max_model_input_sizes.keys())
         else:
@@ -62,6 +67,7 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
             # Save fast tokenizer
             logger.info(f"Save fast tokenizer to {dump_path} with prefix {checkpoint} add_prefix {add_prefix}")
 
+            # 定义导出路径
             # For organization names we create sub-directories
             if "/" in checkpoint:
                 checkpoint_directory, checkpoint_prefix_name = checkpoint.split("/")
@@ -84,11 +90,13 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
 
                 logger.info(f"=> {dump_path_full} with prefix {checkpoint_prefix_name}, add_prefix {add_prefix}")
 
+            # 核心就是调用了 save_pretrained
             file_names = tokenizer.save_pretrained(
                 dump_path_full, legacy_format=False, filename_prefix=checkpoint_prefix_name
             )
             logger.info(f"=> File names {file_names}")
 
+            # 然后只保留 tokenizer.json 文件
             for file_name in file_names:
                 if not file_name.endswith("tokenizer.json"):
                     os.remove(file_name)
