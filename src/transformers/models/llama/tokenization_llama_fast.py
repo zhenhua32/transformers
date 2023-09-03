@@ -26,6 +26,7 @@ from ...utils.versions import require_version
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
 
+# 有版本要求
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
@@ -75,6 +76,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
+        词表文件必须有一个, 要么是 tokenizer.model, 要么是 tokenizer.json
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
@@ -97,6 +99,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             token instead.
     """
 
+    # 词表文件名
     vocab_files_names = VOCAB_FILES_NAMES
     # 慢速版本
     slow_tokenizer_class = LlamaTokenizer

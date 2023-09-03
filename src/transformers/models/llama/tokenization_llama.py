@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
+# 预训练的词表文件映射
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
@@ -46,6 +47,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
     },
 }
+# 位置嵌入的大小
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "hf-internal-testing/llama-tokenizer": 2048,
 }
@@ -77,6 +79,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
             example:
 
+            这就是 legacy 的区别. legacy 下会多一个空格.
             - `legacy=True`:
             ```python
             >>> from transformers import T5Tokenizer
@@ -97,6 +100,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     """
 
+    # 词表文件名. 这个只接受 tokenizer.model. 不支持 tokenizer.json
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -119,10 +123,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        # 四个特殊的 token
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        # 调用父类的初始化方法
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -138,6 +144,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         if legacy is None:
+            # 默认使用的是 legacy 的模式
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
@@ -161,19 +168,27 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
+        """
+        获取 sentencepiece tokenizer 的处理器
+        """
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        # legacy 模式下, 直接加载词表文件
         if self.legacy:  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
             return tokenizer
 
+        # 否则会加载 protobuf 文件
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
             model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
             model = model_pb2.ModelProto.FromString(sp_model)
+            # 添加了一个 normalizer_spec, 并将 add_dummy_prefix 设置为 False
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
             model.normalizer_spec.MergeFrom(normalizer_spec)
+            # 序列化成 string 其实是二进制字符串
             sp_model = model.SerializeToString()
+            # 然后加载
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
 
@@ -208,8 +223,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
+        # 会加一个前缀
         tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
+        # 如果第一个 token 是特殊 token, 则去掉前缀
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
         return tokens
@@ -280,13 +297,16 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
+        # 词表文件名是 tokenizer.model
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
+        #  如果 vocab_file 是文件, 就直接复制了
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
+            # 否则会调用 sp_model.serialized_model_proto(). 这个方法可以一用, 但是我得先加成 sp_model
             with open(out_vocab_file, "wb") as fi:
                 content_spiece_model = self.sp_model.serialized_model_proto()
                 fi.write(content_spiece_model)
