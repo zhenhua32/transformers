@@ -1124,9 +1124,15 @@ class XGLMConverter(SpmConverter):
 
 
 class LlamaConverter(SpmConverter):
+    """
+    看下 llama 分词器的转换方法
+    """
     handle_byte_fallback = True
 
     def vocab(self, proto):
+        """
+        获取词表
+        """
         vocab = [
             ("<unk>", 0.0),
             ("<s>", 0.0),
@@ -1136,10 +1142,16 @@ class LlamaConverter(SpmConverter):
         return vocab
 
     def unk_id(self, proto):
+        """
+        未知词的 id
+        """
         unk_id = 0
         return unk_id
 
     def decoder(self, replacement, add_prefix_space):
+        """
+        解码器
+        """
         return decoders.Sequence(
             [
                 decoders.Replace("▁", " "),
@@ -1150,16 +1162,24 @@ class LlamaConverter(SpmConverter):
         )
 
     def tokenizer(self, proto):
+        """
+        分词器
+        """
         model_type = proto.trainer_spec.model_type
+        # 获取词汇表
         vocab_scores = self.vocab(proto)
         if model_type == 1:
             raise RuntimeError("Llama is supposed to be a BPE model!")
         elif model_type == 2:
+            # TODO: 具体看下这个是提取了什么信息
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            # 构建词表的字典
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            # 创建分词器
             tokenizer = Tokenizer(
                 BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
             )
+            # 添加特殊 token
             tokenizer.add_special_tokens(
                 [
                     AddedToken("<unk>"),
@@ -1175,6 +1195,9 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
+        """
+        标准化器
+        """
         return normalizers.Sequence(
             [
                 normalizers.Prepend(prepend="▁"),
@@ -1186,20 +1209,26 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
+        """
+        后处理部分
+        """
         # 3 possible case :
         # - add_bos and add_eos : '<s>:0 $A:0 </s>:0' and '<s>:0 $A:0 </s>:0 <s>:1 $B:1 </s>:1'
         # - add_bos: '<s>:0 $A:0' and '<s>:0 $A:0 <s>:1 $B:1'
         # - add_eos: '$A:0 </s>:0' and '$A:0 </s>:0 $B:1 </s>:1'
 
+        # 是否添加开始符号和结束符号
         add_bos = self.original_tokenizer.add_bos_token
         add_eos = self.original_tokenizer.add_eos_token
         if add_bos or add_eos:
-            bos = self.original_tokenizer.bos_token
+            # 获取原始分词器中的开始符号和结束符号
+            bos = self.original_tokenizer.bos_token  # 一般是 <s>
             bos_token_id = self.original_tokenizer.bos_token_id
 
-            eos = self.original_tokenizer.eos_token
+            eos = self.original_tokenizer.eos_token  # 一般是 </s>
             eos_token_id = self.original_tokenizer.eos_token_id
 
+            # true 就是1, false 就是0, 就不会加
             single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
             pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
 
@@ -1208,6 +1237,7 @@ class LlamaConverter(SpmConverter):
                 special_tokens.append((bos, bos_token_id))
             if add_eos:
                 special_tokens.append((eos, eos_token_id))
+            # 返回一个模板预处理器
             return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
 
         else:
@@ -1333,7 +1363,8 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
             f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
         )
 
-    # 转换后的类
+    # 用来转换的类
     converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
 
+    # 调用转换方法
     return converter_class(transformer_tokenizer).converted()
