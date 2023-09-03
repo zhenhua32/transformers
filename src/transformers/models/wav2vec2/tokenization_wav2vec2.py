@@ -61,7 +61,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-base-960h": (
+            "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -86,7 +88,7 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 length (like XLNet) truncation/padding to a maximum length will be deactivated.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -146,6 +148,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             The token used for defining the end of a word.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
+        target_lang (`str`, *optional*):
+            A target language the tokenizer should set by default. `target_lang` has to be defined for multi-lingual,
+            nested vocabulary such as [facebook/mms-1b-all](https://huggingface.co/facebook/mms-1b-all).
 
         **kwargs
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
@@ -166,7 +171,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         word_delimiter_token="|",
         replace_word_delimiter_char=" ",
         do_lower_case=False,
-        **kwargs
+        target_lang=None,
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -176,6 +182,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             word_delimiter_token=word_delimiter_token,
             replace_word_delimiter_char=replace_word_delimiter_char,
+            target_lang=target_lang,
             **kwargs,
         )
 
@@ -183,9 +190,18 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         self.do_lower_case = do_lower_case
         self.replace_word_delimiter_char = replace_word_delimiter_char
+        self.target_lang = target_lang
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
+            self.vocab = json.load(vocab_handle)
+
+        # if target lang is defined vocab must be a nested dict
+        # with each target lang being one vocabulary
+        if target_lang is not None:
+            self.encoder = self.vocab[target_lang]
+        else:
+            self.encoder = self.vocab
+
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         # make sure that tokens made of several
@@ -195,6 +211,27 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 self.unique_no_split_tokens.append(token)
 
         self._create_trie(self.unique_no_split_tokens)
+
+    def set_target_lang(self, target_lang: str):
+        """
+        Set the target language of a nested multi-lingual dictionary
+        """
+        if self.vocab == self.encoder:
+            raise ValueError(f"{self.vocab} is not a multi-lingual, nested tokenizer. Cannot set target language.")
+
+        if target_lang not in self.vocab:
+            raise ValueError(f"{target_lang} does not exist. Choose one of {', '.join(self.vocab.keys())}.")
+
+        self.target_lang = target_lang
+        self.init_kwargs["target_lang"] = target_lang
+        self.encoder = self.vocab[target_lang]
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
+        # make sure that tokens made of several
+        # characters are not split at tokenization
+        for token in self.encoder.keys():
+            if len(token) > 1:
+                self.unique_no_split_tokens.append(token)
 
     @property
     def word_delimiter_token(self) -> str:
@@ -229,7 +266,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        return dict(self.encoder, **self.added_tokens_encoder)
+        return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text, **kwargs):
         """
@@ -371,7 +408,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
         output_word_offsets: Optional[bool] = False,
@@ -400,6 +437,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         text = string_output["text"]
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
@@ -419,10 +461,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
@@ -432,7 +474,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
@@ -440,9 +482,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+                Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
+                use of `output_char_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
+                output.
 
                 </Tip>
 
@@ -452,9 +494,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+                Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
+                use of `output_word_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
+                output.
 
                 </Tip>
 
@@ -489,10 +531,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -505,7 +547,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
@@ -513,8 +555,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the example below to better understand how to make use of `output_char_offsets`.
 
                 </Tip>
 
@@ -524,8 +565,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
@@ -601,7 +641,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
 
@@ -648,7 +688,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -717,7 +757,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
+            "facebook/wav2vec2-base-960h": (
+                "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json"
+            ),
         },
     }
     model_input_names = ["input_values", "attention_mask"]
@@ -733,7 +775,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         do_normalize=False,
         return_attention_mask=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -748,7 +790,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         warnings.warn(
-            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
+            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use"
+            " `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
             FutureWarning,
         )
 
@@ -800,7 +843,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -809,12 +852,15 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrayr or a list of list of float values.
+                values, a list of numpy array or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
         """
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         # make sure input is in list format
@@ -884,8 +930,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        clean_up_tokenization_spaces: bool = None,
+        **kwargs,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -902,6 +948,11 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         text = self.convert_tokens_to_string(result)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text
@@ -917,6 +968,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)

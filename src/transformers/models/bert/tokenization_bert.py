@@ -34,20 +34,40 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
         "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
         "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
-        "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt",
+        "bert-base-multilingual-uncased": (
+            "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt"
+        ),
         "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
         "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/vocab.txt",
         "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking": "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking": "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt",
+        "bert-large-uncased-whole-word-masking": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
+        ),
+        "bert-large-cased-whole-word-masking": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
+        ),
+        "bert-large-uncased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        ),
+        "bert-large-cased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        ),
+        "bert-base-cased-finetuned-mrpc": (
+            "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
+        ),
         "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-cased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-uncased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt",
-        "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt",
+        "bert-base-german-dbmdz-uncased": (
+            "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
+        ),
+        "TurkuNLP/bert-base-finnish-cased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt"
+        ),
+        "TurkuNLP/bert-base-finnish-uncased-v1": (
+            "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt"
+        ),
+        "wietsedv/bert-base-dutch-cased": (
+            "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -174,7 +194,7 @@ class BertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             do_lower_case=do_lower_case,
@@ -192,8 +212,8 @@ class BertTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # 加载词汇表
         self.vocab = load_vocab(vocab_file)
@@ -220,11 +240,12 @@ class BertTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
-    def _tokenize(self, text):
+    def _tokenize(self, text, split_special_tokens=False):
         split_tokens = []
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
+            for token in self.basic_tokenizer.tokenize(
+                text, never_split=self.all_special_tokens if not split_special_tokens else None
+            ):
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -370,12 +391,22 @@ class BasicTokenizer(object):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=True,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
@@ -383,11 +414,11 @@ class BasicTokenizer(object):
         self.tokenize_chinese_chars = tokenize_chinese_chars
         # strip 重音符号
         self.strip_accents = strip_accents
+        self.do_split_on_punc = do_split_on_punc
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -406,8 +437,10 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
         # 使用的是空白分词器
-        orig_tokens = whitespace_tokenize(text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -437,8 +470,9 @@ class BasicTokenizer(object):
         return "".join(output)
 
     def _run_split_on_punc(self, text, never_split=None):
-        """拆分标点符号. Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
+        # 拆分标点符号
+        """Splits punctuation on a piece of text."""
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
         chars = list(text)
         i = 0

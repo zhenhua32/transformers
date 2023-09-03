@@ -41,7 +41,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
     },
     "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        "facebook/blenderbot_small-90M": (
+            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        )
     },
 }
 
@@ -102,7 +104,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token="__end__",
         unk_token="__unk__",
         pad_token="__null__",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 
@@ -189,7 +191,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
@@ -218,7 +220,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

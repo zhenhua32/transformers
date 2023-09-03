@@ -58,7 +58,8 @@ def pick_layers_to_copy(n_student, n_teacher):
     except KeyError:
         if n_student != n_teacher:
             warnings.warn(
-                f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
+                f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first"
+                f" {n_student}"
             )
         return list(range(n_student))
 
@@ -83,7 +84,7 @@ def create_student_by_copying_alternating_layers(
     copy_first_teacher_layers=False,
     e_layers_to_copy=None,
     d_layers_to_copy=None,
-    **extra_config_kwargs
+    **extra_config_kwargs,
 ) -> Tuple[PreTrainedModel, List[int], List[int]]:
     """Make a student by copying alternating layers from a teacher, save it to save_path.
     Args:
@@ -106,7 +107,6 @@ def create_student_by_copying_alternating_layers(
         AutoTokenizer.from_pretrained(teacher).save_pretrained(save_path)  # purely for convenience
         teacher = AutoModelForSeq2SeqLM.from_pretrained(teacher).eval()
     else:
-
         assert isinstance(teacher, PreTrainedModel), f"teacher must be a model or string got type {type(teacher)}"
     init_kwargs = teacher.config.to_diff_dict()
 
@@ -144,7 +144,8 @@ def create_student_by_copying_alternating_layers(
     if copy_first_teacher_layers:  # Our copying is done. We just log and save
         e_layers_to_copy, d_layers_to_copy = list(range(e)), list(range(d))
         logger.info(
-            f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
+            f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to"
+            f" {save_path}"
         )
         student.save_pretrained(save_path)
         return student, e_layers_to_copy, d_layers_to_copy
@@ -170,11 +171,11 @@ def create_student_by_copying_alternating_layers(
     logger.info(
         f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
     )
-    student.config.init_metadata = dict(
-        teacher_type=teacher.config.model_type,
-        copied_encoder_layers=e_layers_to_copy,
-        copied_decoder_layers=d_layers_to_copy,
-    )
+    student.config.init_metadata = {
+        "teacher_type": teacher.config.model_type,
+        "copied_encoder_layers": e_layers_to_copy,
+        "copied_decoder_layers": d_layers_to_copy,
+    }
     student.save_pretrained(save_path)
     # Save information about copying for easier reproducibility
 

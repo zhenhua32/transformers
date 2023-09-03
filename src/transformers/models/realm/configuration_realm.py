@@ -21,10 +21,18 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/realm-cc-news-pretrained-embedder": "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-encoder": "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-scorer": "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/config.json",
-    "google/realm-cc-news-pretrained-openqa": "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/config.json",
+    "google/realm-cc-news-pretrained-embedder": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-encoder": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-scorer": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/config.json"
+    ),
+    "google/realm-cc-news-pretrained-openqa": (
+        "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/config.json"
+    ),
     "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/config.json",
     "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/config.json",
     "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/config.json",
@@ -46,7 +54,8 @@ class RealmConfig(PretrainedConfig):
 
     It is used to instantiate an REALM model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the REALM
-    [realm-cc-news-pretrained](https://huggingface.co/google/realm-cc-news-pretrained-embedder) architecture.
+    [google/realm-cc-news-pretrained-embedder](https://huggingface.co/google/realm-cc-news-pretrained-embedder)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -101,18 +110,16 @@ class RealmConfig(PretrainedConfig):
         searcher_beam_size (`int`, *optional*, defaults to 5000):
             Beam size of the searcher. Note that when eval mode is enabled, *searcher_beam_size* will be the same as
             *reader_beam_size*.
-        searcher_seq_len (`int`, *optional*, defaults to 64):
-            Maximum sequence length of the searcher.
 
     Example:
 
     ```python
-    >>> from transformers import RealmEmbedder, RealmConfig
+    >>> from transformers import RealmConfig, RealmEmbedder
 
     >>> # Initializing a REALM realm-cc-news-pretrained-* style configuration
     >>> configuration = RealmConfig()
 
-    >>> # Initializing a model from the google/realm-cc-news-pretrained-embedder style configuration
+    >>> # Initializing a model (with random weights) from the google/realm-cc-news-pretrained-embedder style configuration
     >>> model = RealmEmbedder(configuration)
 
     >>> # Accessing the model configuration
@@ -143,11 +150,10 @@ class RealmConfig(PretrainedConfig):
         reader_seq_len=320,  # 288 + 32
         num_block_records=13353718,
         searcher_beam_size=5000,
-        searcher_seq_len=64,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -177,4 +183,3 @@ class RealmConfig(PretrainedConfig):
         # Retrieval config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
-        self.searcher_seq_len = searcher_seq_len

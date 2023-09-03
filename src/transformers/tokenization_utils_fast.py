@@ -16,11 +16,13 @@
  Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
  see tokenization_utils.py
 """
+import copy
 import json
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
@@ -89,8 +91,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
-    # 能保存慢速版的 tokenizer
-    can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -106,7 +106,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             )
 
         if tokenizer_object is not None:
-            fast_tokenizer = tokenizer_object
+            fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and not from_slow:
             # 直接可用, 从文件中加载快速版的 tokenizer
             # We have a serialization from tokenizers which let us directly build the backend
@@ -136,11 +136,39 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         self._decode_use_source_tokenizer = False
 
+        _truncation = self._tokenizer.truncation
+
+        if _truncation is not None:
+            self._tokenizer.enable_truncation(**_truncation)
+            kwargs.setdefault("max_length", _truncation["max_length"])
+            kwargs.setdefault("truncation_side", _truncation["direction"])
+            kwargs.setdefault("stride", _truncation["stride"])
+            kwargs.setdefault("truncation_strategy", _truncation["strategy"])
+        else:
+            self._tokenizer.no_truncation()
+
+        _padding = self._tokenizer.padding
+        if _padding is not None:
+            self._tokenizer.enable_padding(**_padding)
+            kwargs.setdefault("pad_token", _padding["pad_token"])
+            kwargs.setdefault("pad_token_type_id", _padding["pad_type_id"])
+            kwargs.setdefault("padding_side", _padding["direction"])
+            kwargs.setdefault("max_length", _padding["length"])
+            kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
+
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
     @property
     def is_fast(self) -> bool:
+        return True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        """
+        `bool`: Whether or not the slow tokenizer can be saved. Usually for sentencepiece based slow tokenizer, this
+        can only be `True` if the original `"sentencepiece.model"` was not deleted.
+        """
         return True
 
     @property
@@ -167,7 +195,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
         full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
         # 对了一个差集的 dict
-        added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
         return added_vocab
 
     def __len__(self) -> int:
@@ -258,11 +286,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
-        # 如果是数组, 最后也返回一个数组
-        ids = []
-        for token in tokens:
-            ids.append(self._convert_token_to_id_with_added_voc(token))
-        return ids
+        return [self._convert_token_to_id_with_added_voc(token) for token in tokens]
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         """如果是None, 用 unk_token_id 替换, 其他返回 token_to_id 的结果"""
@@ -360,7 +384,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 The stride to use when handling overflow.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
         """
         # 获取当前的截断和填充策略
         _truncation = self._tokenizer.truncation
@@ -429,10 +453,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-        """批量编码"""
-        # 要求是个数组
-        if not isinstance(batch_text_or_text_pairs, list):
-            raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
+        if not isinstance(batch_text_or_text_pairs, (tuple, list)):
+            raise TypeError(
+                f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})"
+            )
 
         # 更新截断和填充策略
         # Set the truncation and padding strategy and restore the initial configuration
@@ -522,9 +546,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # 是否是序列对
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
@@ -570,8 +593,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self,
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        clean_up_tokenization_spaces: bool = None,
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
@@ -580,6 +603,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text
@@ -602,8 +630,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # 当没有提供 slow_tokenizer_class 时, 不能使用 legacy_format
         if self.slow_tokenizer_class is None and legacy_format is True:
             raise ValueError(
-                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You "
-                "might consider leaving the legacy_format at `None` or setting it to `False`."
+                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You"
+                " might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
         # 可以保存成慢速形式
@@ -623,7 +651,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             added_vocab = self.get_added_vocab()
             if added_vocab:
                 with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, ensure_ascii=False)
+                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                     f.write(out_str)
 
             # 保存词汇表, 但这个类里也没实现, 父类里也没实现
@@ -667,7 +695,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             special_tokens_map (`Dict[str, str]`, *optional*):
                 If you want to rename some of the special tokens this tokenizer uses, pass along a mapping old special
                 token name to new special token name in this argument.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:
@@ -748,6 +776,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
+        if tokenizer_json["pre_tokenizer"] is not None and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel":
+            kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         # 实例化训练器类
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]

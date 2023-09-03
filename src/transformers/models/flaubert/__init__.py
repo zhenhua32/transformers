@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -26,7 +22,12 @@ _import_structure = {
     "tokenization_flaubert": ["FlaubertTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flaubert"] = [
         "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FlaubertForMultipleChoice",
@@ -36,9 +37,15 @@ if is_torch_available():
         "FlaubertForTokenClassification",
         "FlaubertModel",
         "FlaubertWithLMHeadModel",
+        "FlaubertPreTrainedModel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_flaubert"] = [
         "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFFlaubertForMultipleChoice",
@@ -55,7 +62,12 @@ if TYPE_CHECKING:
     from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertOnnxConfig
     from .tokenization_flaubert import FlaubertTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
@@ -64,10 +76,16 @@ if TYPE_CHECKING:
             FlaubertForSequenceClassification,
             FlaubertForTokenClassification,
             FlaubertModel,
+            FlaubertPreTrainedModel,
             FlaubertWithLMHeadModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,

@@ -22,8 +22,6 @@ import sys
 import unicodedata
 from typing import List, Optional, Tuple
 
-import sacremoses as sm
-
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
@@ -613,7 +611,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         lang2id=None,
         id2lang=None,
         do_lowercase_and_remove_accent=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -629,11 +627,21 @@ class XLMTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses
+
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
+        self.cache_moses_tokenizer = {}
+        self.lang_with_custom_tokenizer = {"zh", "th", "ja"}
         # True for current supported model (v1.2.0), False for XLM-17 & 100
         self.do_lowercase_and_remove_accent = do_lowercase_and_remove_accent
         self.lang2id = lang2id
@@ -659,7 +667,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
-            punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
+            punct_normalizer = self.sm.MosesPunctNormalizer(lang=lang)
             self.cache_moses_punct_normalizer[lang] = punct_normalizer
         else:
             punct_normalizer = self.cache_moses_punct_normalizer[lang]
@@ -667,7 +675,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def moses_tokenize(self, text, lang):
         if lang not in self.cache_moses_tokenizer:
-            moses_tokenizer = sm.MosesTokenizer(lang=lang)
+            moses_tokenizer = self.sm.MosesTokenizer(lang=lang)
             self.cache_moses_tokenizer[lang] = moses_tokenizer
         else:
             moses_tokenizer = self.cache_moses_tokenizer[lang]
@@ -689,7 +697,8 @@ class XLMTokenizer(PreTrainedTokenizer):
                 )
             except (AttributeError, ImportError):
                 logger.error(
-                    "Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper (https://github.com/chezou/Mykytea-python) with the following steps"
+                    "Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper"
+                    " (https://github.com/chezou/Mykytea-python) with the following steps"
                 )
                 logger.error("1. git clone git@github.com:neubig/kytea.git && cd kytea")
                 logger.error("2. autoreconf -i")
@@ -782,7 +791,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         externally, and set `bypass_tokenizer=True` to bypass the tokenizer.
 
         Args:
-
             - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
               languages. However, we don't enforce it.
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
@@ -793,7 +801,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         """
         if lang and self.lang2id and lang not in self.lang2id:
             logger.error(
-                "Supplied language code not found in lang2id mapping. Please check that your language is supported by the loaded pretrained model."
+                "Supplied language code not found in lang2id mapping. Please check that your language is supported by"
+                " the loaded pretrained model."
             )
         if bypass_tokenizer:
             text = text.split()
@@ -842,7 +851,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 
@@ -955,7 +964,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
@@ -970,3 +979,21 @@ class XLMTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sm"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        try:
+            import sacremoses
+        except ImportError:
+            raise ImportError(
+                "You need to install sacremoses to use XLMTokenizer. "
+                "See https://pypi.org/project/sacremoses/ for installation."
+            )
+
+        self.sm = sacremoses

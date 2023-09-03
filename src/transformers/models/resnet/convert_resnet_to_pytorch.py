@@ -22,13 +22,13 @@ from functools import partial
 from pathlib import Path
 from typing import List
 
+import timm
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
 from torch import Tensor
 
-import timm
-from huggingface_hub import hf_hub_download
-from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
+from transformers import AutoImageProcessor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
 
@@ -51,7 +51,7 @@ class Tracker:
         for m in self.module.modules():
             self.handles.append(m.register_forward_hook(self._forward_hook))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -81,7 +81,8 @@ class ModuleTransfer:
 
         if len(dest_traced) != len(src_traced):
             raise Exception(
-                f"Numbers of operations are different. Source module has {len(src_traced)} operations while destination module has {len(dest_traced)}."
+                f"Numbers of operations are different. Source module has {len(src_traced)} operations while"
+                f" destination module has {len(dest_traced)}."
             )
 
         for dest_m, src_m in zip(dest_traced, src_traced):
@@ -112,10 +113,10 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
         )
 
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-        feature_extractor.push_to_hub(
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / checkpoint_name,
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 
@@ -127,9 +128,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     num_labels = 1000
     expected_shape = (1, num_labels)
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -173,7 +174,10 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, currently: resnet18,26,34,50,101,152. If `None`, all of them will the converted.",
+        help=(
+            "The name of the model you wish to convert, it must be one of the supported resnet* architecture,"
+            " currently: resnet18,26,34,50,101,152. If `None`, all of them will the converted."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -187,7 +191,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         required=False,
-        help="If True, push model and feature extractor to the hub.",
+        help="If True, push model and image processor to the hub.",
     )
 
     args = parser.parse_args()

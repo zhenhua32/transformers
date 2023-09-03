@@ -29,32 +29,56 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-ctx_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-question_encoder-multiset-base": (
+            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": (
+            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json"
+        ),
+        "facebook/dpr-reader-multiset-base": (
+            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -206,7 +230,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
@@ -273,7 +297,7 @@ class CustomDPRReaderTokenizerMixin:
               spans in the same passage. It corresponds to the sum of the start and end logits of the span.
             - **relevance_score**: `float` that corresponds to the score of the each passage to answer the question,
               compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            - **doc_id**: ``int``` the id of the passage. - **start_index**: `int` the start index of the span
+            - **doc_id**: `int` the id of the passage. - **start_index**: `int` the start index of the span
               (inclusive). - **end_index**: `int` the end index of the span (inclusive).
 
         Examples:
@@ -292,6 +316,7 @@ class CustomDPRReaderTokenizerMixin:
         >>> outputs = model(**encoded_inputs)
         >>> predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
         >>> print(predicted_spans[0].text)  # best span
+        a song
         ```"""
         input_ids = reader_input["input_ids"]
         start_logits, end_logits, relevance_logits = reader_output[:3]
@@ -342,8 +367,8 @@ class CustomDPRReaderTokenizerMixin:
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
-        for (start_index, start_score) in enumerate(start_logits):
-            for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
+        for start_index, start_score in enumerate(start_logits):
+            for answer_length, end_score in enumerate(end_logits[start_index : start_index + max_answer_length]):
                 scores.append(((start_index, start_index + answer_length), start_score + end_score))
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []
@@ -354,11 +379,9 @@ class CustomDPRReaderTokenizerMixin:
             if length > max_answer_length:
                 raise ValueError(f"Span is too long: {length} > {max_answer_length}")
             if any(
-                [
-                    start_index <= prev_start_index <= prev_end_index <= end_index
-                    or prev_start_index <= start_index <= end_index <= prev_end_index
-                    for (prev_start_index, prev_end_index) in chosen_span_intervals
-                ]
+                start_index <= prev_start_index <= prev_end_index <= end_index
+                or prev_start_index <= start_index <= end_index <= prev_end_index
+                for (prev_start_index, prev_end_index) in chosen_span_intervals
             ):
                 continue
             chosen_span_intervals.append((start_index, end_index))

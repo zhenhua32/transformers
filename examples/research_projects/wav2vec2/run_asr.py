@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import datasets
+import librosa
 import numpy as np
 import torch
+from lang_trans import arabic
 from packaging import version
 from torch import nn
 
-import librosa
-from lang_trans import arabic
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -30,7 +30,7 @@ from transformers import (
 if is_apex_available():
     from apex import amp
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -99,7 +99,9 @@ class DataTrainingArguments:
     validation_split_name: Optional[str] = field(
         default="validation",
         metadata={
-            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            "help": (
+                "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+            )
         },
     )
     target_text_column: Optional[str] = field(
@@ -121,7 +123,10 @@ class DataTrainingArguments:
     orthography: Optional[str] = field(
         default="librispeech",
         metadata={
-            "help": "Orthography used for normalization and tokenization: 'librispeech' (default), 'timit', or 'buckwalter'."
+            "help": (
+                "Orthography used for normalization and tokenization: 'librispeech' (default), 'timit', or"
+                " 'buckwalter'."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -261,14 +266,13 @@ class DataCollatorCTCWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                max_length=self.max_length_labels,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        labels_batch = self.processor.pad(
+            labels=label_features,
+            padding=self.padding,
+            max_length=self.max_length_labels,
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -361,7 +365,7 @@ def main():
     target_sr = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
     vocabulary_chars_str = "".join(t for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
     vocabulary_text_cleaner = re.compile(  # remove characters not in vocabulary
-        f"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
+        rf"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
         flags=re.IGNORECASE if processor.tokenizer.do_lower_case else 0,
     )
     text_updates = []
@@ -392,11 +396,13 @@ def main():
         val_dataset = val_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
         if len(train_dataset) > old_train_size:
             logger.warning(
-                f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+                f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than"
+                f" {data_args.max_duration_in_seconds} second(s)."
             )
         if len(val_dataset) > old_val_size:
             logger.warning(
-                f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+                f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than"
+                f" {data_args.max_duration_in_seconds} second(s)."
             )
     logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 
@@ -412,9 +418,10 @@ def main():
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
 
-        batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-        with processor.as_target_processor():
-            batch["labels"] = processor(batch[data_args.target_text_column]).input_ids
+        processed_batch = processor(
+            audio=batch["speech"], text=batch[data_args.target_text_column], sampling_rate=batch["sampling_rate"][0]
+        )
+        batch.update(processed_batch)
         return batch
 
     train_dataset = train_dataset.map(

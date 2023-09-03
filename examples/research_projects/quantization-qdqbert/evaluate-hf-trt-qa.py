@@ -21,19 +21,19 @@ import timeit
 
 import datasets
 import numpy as np
-import torch
-from absl import logging as absl_logging
-from datasets import load_dataset, load_metric
-from torch.utils.data import DataLoader
-
 import pycuda.autoinit  # noqa: F401
 import pycuda.driver as cuda
 import tensorrt as trt
-import transformers
+import torch
+from absl import logging as absl_logging
 from accelerate import Accelerator
+from datasets import load_dataset, load_metric
+from torch.utils.data import DataLoader
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
 from transformers.trainer_pt_utils import nested_concat, nested_truncate
-from utils_qa import postprocess_qa_predictions
 
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -87,8 +87,10 @@ parser.add_argument(
     "--max_seq_length",
     default=384,
     type=int,
-    help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-    "longer than this will be truncated, and sequences shorter than this will be padded.",
+    help=(
+        "The maximum total input sequence length after WordPiece tokenization. Sequences "
+        "longer than this will be truncated, and sequences shorter than this will be padded."
+    ),
 )
 parser.add_argument(
     "--doc_stride",
@@ -109,8 +111,10 @@ parser.add_argument(
     "--max_answer_length",
     default=30,
     type=int,
-    help="The maximum length of an answer that can be generated. This is needed because the start "
-    "and end predictions are not conditioned on one another.",
+    help=(
+        "The maximum length of an answer that can be generated. This is needed because the start "
+        "and end predictions are not conditioned on one another."
+    ),
 )
 
 parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
@@ -131,9 +135,7 @@ parser.add_argument(
 parser.add_argument(
     "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
 )
-parser.add_argument(
-    "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
-)
+parser.add_argument("--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets")
 parser.add_argument(
     "--fp16",
     action="store_true",
@@ -393,7 +395,6 @@ logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
 with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
     f.read()
 ) as engine, engine.create_execution_context() as context:
-
     # setup for TRT inferrence
     for i in range(len(input_names)):
         context.set_binding_shape(i, INPUT_SHAPE)
@@ -425,7 +426,6 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
 
     all_preds = None
     for step, batch in enumerate(eval_dataloader):
-
         outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream)
         total_time += infer_time
         niter += 1

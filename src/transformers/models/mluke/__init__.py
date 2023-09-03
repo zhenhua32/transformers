@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,17 +14,27 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_sentencepiece_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
 
 
 _import_structure = {}
 
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_mluke"] = ["MLukeTokenizer"]
 
 if TYPE_CHECKING:
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_mluke import MLukeTokenizer
 
 

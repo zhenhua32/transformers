@@ -38,7 +38,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
     },
     "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        "facebook/blenderbot_small-90M": (
+            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
+        )
     },
 }
 
@@ -70,7 +72,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             ByteLevelBPETokenizer(

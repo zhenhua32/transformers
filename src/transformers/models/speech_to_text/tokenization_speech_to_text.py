@@ -36,10 +36,14 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json",
+        "facebook/s2t-small-librispeech-asr": (
+            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json"
+        ),
     },
     "spm_file": {
-        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
+        "facebook/s2t-small-librispeech-asr": (
+            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
+        )
     },
 }
 
@@ -186,11 +190,19 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = self.sp_model.decode(tokens)
-
-        if self.do_upper_case:
-            out_string = out_string.upper()
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                decoded = self.sp_model.decode(current_sub_tokens)
+                out_string += (decoded.upper() if self.do_upper_case else decoded) + token + " "
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        decoded = self.sp_model.decode(current_sub_tokens)
+        out_string += decoded.upper() if self.do_upper_case else decoded
+        return out_string.strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""

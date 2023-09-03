@@ -25,8 +25,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
-    "xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
+    "facebook/xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
+    "facebook/xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
     # See all XLM-RoBERTa-XL models at https://huggingface.co/models?filter=xlm-roberta-xl
 }
 
@@ -36,7 +36,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`XLMRobertaXLModel`] or a [`TFXLMRobertaXLModel`].
     It is used to instantiate a XLM_ROBERTA_XL model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    XLM_ROBERTA_XL [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    XLM_ROBERTA_XL [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -86,12 +86,12 @@ class XLMRobertaXLConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import XLMRobertaXLModel, XLMRobertaXLConfig
+    >>> from transformers import XLMRobertaXLConfig, XLMRobertaXLModel
 
     >>> # Initializing a XLM_ROBERTA_XL bert-base-uncased style configuration
     >>> configuration = XLMRobertaXLConfig()
 
-    >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
     >>> model = XLMRobertaXLModel(configuration)
 
     >>> # Accessing the model configuration
@@ -119,7 +119,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size

@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,16 +14,26 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {
-    "configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
-}
+_import_structure = {"configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"]}
 
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_dpt"] = ["DPTFeatureExtractor"]
+    _import_structure["image_processing_dpt"] = ["DPTImageProcessor"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_dpt"] = [
         "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DPTForDepthEstimation",
@@ -40,10 +46,21 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
 
-    if is_vision_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_dpt import DPTFeatureExtractor
+        from .image_processing_dpt import DPTImageProcessor
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_dpt import (
             DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPTForDepthEstimation,

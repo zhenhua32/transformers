@@ -36,7 +36,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/tokenizer.json",
+        "openai/clip-vit-base-patch32": (
+            "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -61,7 +63,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|startoftext|>`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
@@ -82,7 +84,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -97,12 +99,12 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
         if not isinstance(self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
             raise ValueError(
-                "The `backend_tokenizer` provided does not match the expected format. The CLIP tokenizer has been "
-                "heavily modified from transformers version 4.17.0. You need to convert the tokenizer you are using to be compatible with this version."
-                "The easiest way to do so is "
-                '`CLIPTokenizerFast.from_pretrained("path_to_local_folder_or_hub_repo, from_slow=True)`.'
-                " If you want to use your existing tokenizer, you will have to revert to a version prior to "
-                "4.17.0 of transformers."
+                "The `backend_tokenizer` provided does not match the expected format. The CLIP tokenizer has been"
+                " heavily modified from transformers version 4.17.0. You need to convert the tokenizer you are using"
+                " to be compatible with this version.The easiest way to do so is"
+                ' `CLIPTokenizerFast.from_pretrained("path_to_local_folder_or_hub_repo, from_slow=True)`. If you want'
+                " to use your existing tokenizer, you will have to revert to a version prior to 4.17.0 of"
+                " transformers."
             )
 
         self._wrap_decode_method_backend_tokenizer()

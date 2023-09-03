@@ -25,7 +25,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -35,7 +35,10 @@ from .utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_mps_available,
+    is_torch_npu_available,
     is_torch_tpu_available,
+    requires_backends,
 )
 
 
@@ -44,6 +47,39 @@ if is_torch_available():
 
 if is_tf_available():
     import tensorflow as tf
+
+
+def seed_worker(_):
+    """
+    Helper function to set worker seed during Dataloader initialization.
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    set_seed(worker_seed)
+
+
+def enable_full_determinism(seed: int, warn_only: bool = False):
+    """
+    Helper function for reproducible behavior during distributed training. See
+    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
+    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    """
+    # set seed first
+    set_seed(seed)
+
+    if is_torch_available():
+        # Enable PyTorch deterministic mode. This potentially requires either the environment
+        # variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # depending on the CUDA version, so we set them both here
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(True, warn_only=warn_only)
+
+        # Enable CUDNN deterministic mode
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    if is_tf_available():
+        tf.config.experimental.enable_op_determinism()
 
 
 def set_seed(seed: int):
@@ -59,6 +95,8 @@ def set_seed(seed: int):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
+    if is_torch_npu_available():
+        torch.npu.manual_seed_all(seed)
     if is_tf_available():
         tf.random.set_seed(seed)
 
@@ -158,7 +196,7 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
+    The best run found by a hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
         run_id (`str`):
@@ -168,11 +206,14 @@ class BestRun(NamedTuple):
             The objective that was obtained for this run.
         hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
+        run_summary (`Optional[Any]`):
+            A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
     """
 
     run_id: str
     objective: float
     hyperparameters: Dict[str, Any]
+    run_summary: Optional[Any] = None
 
 
 def default_compute_objective(metrics: Dict[str, float]) -> float:
@@ -190,7 +231,11 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [
+        m
+        for m in metrics.keys()
+        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+    ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -211,7 +256,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 def default_hp_space_ray(trial) -> Dict[str, float]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip " "install ray[tune]`"
+    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {
@@ -260,20 +305,12 @@ class HPSearchBackend(ExplicitEnum):
     WANDB = "wandb"
 
 
-default_hp_space = {
-    HPSearchBackend.OPTUNA: default_hp_space_optuna,
-    HPSearchBackend.RAY: default_hp_space_ray,
-    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
-    HPSearchBackend.WANDB: default_hp_space_wandb,
-}
-
-
 def is_main_process(local_rank):
     """
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.get_ordinal() == 0
@@ -284,7 +321,7 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
@@ -303,13 +340,14 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     should be run immediately after the operation to be measured has completed.
 
     Args:
-
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
+    if runtime == 0:
+        return result
     if num_samples is not None:
         samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
@@ -326,6 +364,8 @@ class SchedulerType(ExplicitEnum):
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+    INVERSE_SQRT = "inverse_sqrt"
+    REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
 
 
 class TrainerMemoryTracker:
@@ -355,12 +395,12 @@ class TrainerMemoryTracker:
     stages = {
         "__init__": "init",
         "train": "train",
+        "_inner_training_loop": "train",
         "evaluate": "eval",
         "predict": "test",
     }
 
     def __init__(self, skip_memory_metrics=False):
-
         self.skip_memory_metrics = skip_memory_metrics
 
         if not is_psutil_available():
@@ -373,6 +413,11 @@ class TrainerMemoryTracker:
         import psutil  # noqa
 
         if is_torch_cuda_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_mps_available():
             import torch
 
             self.torch = torch
@@ -467,21 +512,21 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
             self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
-            self.gpu[self.cur_stage] = dict(
-                begin=self.gpu_mem_used_at_start,
-                end=self.gpu_mem_used_now,
-                alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-            )
+            self.gpu[self.cur_stage] = {
+                "begin": self.gpu_mem_used_at_start,
+                "end": self.gpu_mem_used_now,
+                "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+                "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+            }
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
-        self.cpu[self.cur_stage] = dict(
-            begin=self.cpu_mem_used_at_start,
-            end=self.cpu_mem_used_now,
-            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
-            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
-        )
+        self.cpu[self.cur_stage] = {
+            "begin": self.cpu_mem_used_at_start,
+            "end": self.cpu_mem_used_now,
+            "alloc": (self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            "peaked": max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        }
 
         # reset - cycle finished
         self.cur_stage = None
@@ -582,3 +627,81 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+def find_executable_batch_size(
+    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+):
+    """
+    Args:
+    A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
+    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    its first argument.
+        function (`callable`, *optional*)
+            A function to wrap
+        starting_batch_size (`int`, *optional*)
+            The batch size to try and fit into memory
+        auto_find_batch_size (`bool`, *optional*)
+            If False, will just execute `function`
+    """
+    if function is None:
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            auto_find_batch_size=auto_find_batch_size,
+        )
+
+    if auto_find_batch_size:
+        requires_backends(find_executable_batch_size, "accelerate")
+        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
+
+        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+
+    return functools.partial(function, batch_size=starting_batch_size)
+
+
+class FSDPOption(ExplicitEnum):
+    FULL_SHARD = "full_shard"
+    SHARD_GRAD_OP = "shard_grad_op"
+    NO_SHARD = "no_shard"
+    OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"
+
+
+class RemoveColumnsCollator:
+    """Wrap the data collator to remove unused columns before they are passed to the collator."""
+
+    def __init__(
+        self,
+        data_collator,
+        signature_columns,
+        logger=None,
+        model_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
+        self.data_collator = data_collator
+        self.signature_columns = signature_columns
+        self.logger = logger
+        self.description = description
+        self.model_name = model_name
+        self.message_logged = False
+
+    def _remove_columns(self, feature: dict) -> dict:
+        if not isinstance(feature, dict):
+            return feature
+        if not self.message_logged and self.logger and self.model_name:
+            ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
+            if len(ignored_columns) > 0:
+                dset_description = "" if self.description is None else f"in the {self.description} set"
+                self.logger.info(
+                    f"The following columns {dset_description} don't have a corresponding argument in "
+                    f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                    f" If {', '.join(ignored_columns)} are not expected by `{self.model_name}.forward`, "
+                    " you can safely ignore this message."
+                )
+                self.message_logged = True
+        return {k: v for k, v in feature.items() if k in self.signature_columns}
+
+    def __call__(self, features: List[dict]):
+        features = [self._remove_columns(feature) for feature in features]
+        return self.data_collator(features)

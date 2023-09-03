@@ -18,9 +18,8 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfig
-
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -29,14 +28,18 @@ logger = logging.get_logger(__name__)
 IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "kssteven/ibert-roberta-base": "https://huggingface.co/kssteven/ibert-roberta-base/resolve/main/config.json",
     "kssteven/ibert-roberta-large": "https://huggingface.co/kssteven/ibert-roberta-large/resolve/main/config.json",
-    "kssteven/ibert-roberta-large-mnli": "https://huggingface.co/kssteven/ibert-roberta-large-mnli/resolve/main/config.json",
+    "kssteven/ibert-roberta-large-mnli": (
+        "https://huggingface.co/kssteven/ibert-roberta-large-mnli/resolve/main/config.json"
+    ),
 }
 
 
 class IBertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IBertModel`]. It is used to instantiate a I-BERT
-    model according to the specified arguments,
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the IBERT
+    [kssteven/ibert-roberta-base](https://huggingface.co/kssteven/ibert-roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -107,7 +110,7 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         quant_mode=False,
         force_dequant="none",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

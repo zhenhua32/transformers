@@ -47,10 +47,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlmv2-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/vocab.txt"
+        ),
     },
     "tokenizer_file": {
-        "microsoft/layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/tokenizer.json",
+        "microsoft/layoutlmv2-base-uncased": (
+            "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -104,7 +108,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original LayoutLMv2).
     """
@@ -132,7 +136,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         only_label_first_subword=True,
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -181,7 +185,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -193,7 +197,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -212,6 +216,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -256,20 +261,23 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         words = text if text_pair is None else text_pair
-        assert boxes is not None, "You must provide corresponding bounding boxes"
+        if boxes is None:
+            raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
-            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide words and boxes for an equal amount of examples")
             for words_example, boxes_example in zip(words, boxes):
-                assert len(words_example) == len(
-                    boxes_example
-                ), "You must provide as many words as there are bounding boxes"
+                if len(words_example) != len(boxes_example):
+                    raise ValueError("You must provide as many words as there are bounding boxes")
         else:
-            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide as many words as there are bounding boxes")
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
                 raise ValueError(
-                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`: {len(text_pair)}."
+                    f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
+                    f" {len(text_pair)}."
                 )
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
             is_pair = bool(text_pair is not None)
@@ -330,7 +338,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -342,9 +350,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -394,7 +401,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -406,7 +413,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
@@ -477,7 +484,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -629,9 +635,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str
@@ -703,7 +708,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

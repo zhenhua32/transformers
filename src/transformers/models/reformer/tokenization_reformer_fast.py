@@ -38,10 +38,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/spiece.model"
+        "google/reformer-crime-and-punishment": (
+            "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/spiece.model"
+        )
     },
     "tokenizer_file": {
-        "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/tokenizer.json"
+        "google/reformer-crime-and-punishment": (
+            "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/tokenizer.json"
+        )
     },
 }
 
@@ -94,7 +98,7 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         unk_token="<unk>",
         additional_special_tokens=[],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -106,7 +110,10 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:

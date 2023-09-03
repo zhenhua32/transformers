@@ -23,10 +23,13 @@ from .utils import ENV_VARS_TRUE_VALUES
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+# isort: off
+from .integrations import (
     is_comet_available,
     is_wandb_available,
 )
+
+# isort: on
 
 import numpy as np
 import tensorflow as tf
@@ -34,7 +37,14 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    IntervalStrategy,
+    PredictionOutput,
+    enable_full_determinism,
+    set_seed,
+)
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -134,7 +144,7 @@ class TFTrainer:
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
 
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """
@@ -455,7 +465,6 @@ class TFTrainer:
 
     @tf.function
     def distributed_prediction_steps(self, batch):
-
         nb_instances_in_batch = self._compute_nb_instances(batch)
         inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
@@ -509,7 +518,6 @@ class TFTrainer:
             epochs_trained = 0
             steps_trained_in_current_epoch = 0
             if self.model.ckpt_manager.latest_checkpoint:
-
                 logger.info(
                     f"Checkpoint file {self.model.ckpt_manager.latest_checkpoint} found and restoring from checkpoint"
                 )
@@ -553,7 +561,6 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds):
-
                     # Skip past any already trained steps if resuming training
                     if steps_trained_in_current_epoch > 0:
                         steps_trained_in_current_epoch -= 1
@@ -697,7 +704,6 @@ class TFTrainer:
     @tf.function
     def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
-
             nb_instances_in_batch = self._compute_nb_instances(batch)
             inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
@@ -705,7 +711,6 @@ class TFTrainer:
 
     @staticmethod
     def _compute_nb_instances(batch):
-
         labels = batch[-1]
         if isinstance(labels, PerReplica):
             labels = tf.concat(labels.values, axis=0)
@@ -716,7 +721,6 @@ class TFTrainer:
 
     @staticmethod
     def _get_step_inputs(batch, nb_instances):
-
         features, labels = batch
 
         if isinstance(labels, PerReplica):

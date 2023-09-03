@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from transformers import BartConfig
-from transformers.generation_utils import GenerationMixin
+from transformers.generation import GenerationMixin
 
 
 def _convert_past_list_to_tuple(past_key_values):
@@ -264,7 +264,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
 
         past: List[torch.Tensor] = []
         while cur_len < max_length:
-
             logits, past = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
             next_token_logits = logits[:, -1, :]
 
@@ -303,7 +302,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         decoder_start_token_id,
         bos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
-
         decoder_input_ids = (
             torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
             * decoder_start_token_id
@@ -392,13 +390,14 @@ class BeamSearchScorerTS(torch.nn.Module):
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
-                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1,"
+                " one should make use of `greedy_search` instead."
             )
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
-                f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
-                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                "`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be"
+                f" divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
             )
 
     def hypo_len(self, hypo_idx: int):
@@ -508,7 +507,8 @@ class BeamSearchScorerTS(torch.nn.Module):
 
             if beam_idx < self.group_size:
                 raise ValueError(
-                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id:"
+                    f" {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
@@ -631,7 +631,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
     def beam_search(
         self, input_ids, encoder_output, attention_mask, num_beams, max_length, pad_token_id: int, eos_token_id: int
     ):
-
         batch_size = self.beam_scorer.batch_size
 
         num_beams = self.beam_scorer.num_beams
@@ -639,7 +638,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
         assert (
             num_beams * batch_size == batch_beam_size
-        ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9

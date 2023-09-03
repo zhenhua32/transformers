@@ -16,7 +16,6 @@
 """ Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
 
 import argparse
-import logging
 import math
 import os
 from dataclasses import dataclass
@@ -25,13 +24,14 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
+from huggingface_hub import Repository, create_repo
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from huggingface_hub import Repository
 from transformers import (
     AdamW,
     SchedulerType,
@@ -43,10 +43,10 @@ from transformers import (
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
-from transformers.utils import get_full_repo_name
+from transformers.utils import send_example_telemetry
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def parse_args():
@@ -219,7 +219,10 @@ def parse_args():
         "--pad_to_multiple_of",
         type=int,
         default=None,
-        help="If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).",
+        help=(
+            "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the"
+            " use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."
+        ),
     )
     parser.add_argument(
         "--adam_beta1",
@@ -244,6 +247,24 @@ def parse_args():
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--mask_time_prob",
+        type=float,
+        default=None,
+        help=(
+            "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked in the"
+            " contrastive task. If omitted, will pull value from model config."
+        ),
+    )
+    parser.add_argument(
+        "--mask_time_length",
+        type=int,
+        default=None,
+        help=(
+            "Length of each vector mask span to mask along the time axis in the contrastive task."
+            " If omitted, will pull value from model config."
+        ),
+    )
     args = parser.parse_args()
 
     if args.push_to_hub:
@@ -282,12 +303,22 @@ class DataCollatorForWav2Vec2Pretraining:
             If set will pad the sequence to a multiple of the provided value.
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
+        mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
+            Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
+            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            and results in about 49 percent of each sequence being masked on average.
+        mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
+            Length of each vector mask span to mask along the time axis in the contrastive task. The default value
+            originates from the original wav2vec 2.0 article and corresponds to the ``M`` variable mentioned there.
     """
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
+    mask_time_prob: Optional[float] = 0.65
+    mask_time_length: Optional[int] = 10
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
@@ -317,8 +348,8 @@ class DataCollatorForWav2Vec2Pretraining:
         # sample randomly masked indices
         mask_time_indices = _compute_mask_indices(
             features_shape,
-            self.model.config.mask_time_prob,
-            self.model.config.mask_time_length,
+            self.mask_time_prob,
+            self.mask_time_length,
             attention_mask=batch.get("sub_attention_mask"),
         )
 
@@ -360,13 +391,13 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
-    logger.info(accelerator.state)
-
-    # Setup logging, we only want one process per machine to log things on the screen.
-    # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -387,11 +418,14 @@ def main():
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub and not args.preprocessing_only:
-            if args.hub_model_id is None:
-                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
-            else:
-                repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -444,7 +478,7 @@ def main():
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
         raise ValueError(
-            "Training is only supported for normalized inputs. " "Make sure ``feature_extractor.do_normalize == True``"
+            "Training is only supported for normalized inputs. Make sure ``feature_extractor.do_normalize == True``"
         )
 
     # set max & min audio length in number of samples
@@ -500,7 +534,8 @@ def main():
     # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     # initialize random model
@@ -511,8 +546,16 @@ def main():
         model.gradient_checkpointing_enable()
 
     # 4. Define data collator, optimizer and scheduler
+
+    mask_time_prob = config.mask_time_prob if args.mask_time_prob is None else args.mask_time_prob
+    mask_time_length = config.mask_time_length if args.mask_time_length is None else args.mask_time_length
+
     data_collator = DataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        pad_to_multiple_of=args.pad_to_multiple_of,
+        mask_time_prob=mask_time_prob,
+        mask_time_length=mask_time_length,
     )
     train_dataloader = DataLoader(
         vectorized_datasets["train"],
@@ -542,8 +585,6 @@ def main():
 
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-    else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
@@ -551,6 +592,9 @@ def main():
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.max_train_steps,
     )
+
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # 5. Train
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -563,11 +607,13 @@ def main():
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     completed_steps = 0
+    starting_epoch = 0
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
-    for epoch in range(args.num_train_epochs):
+    starting_epoch = 0
+    for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
             # compute num of losses
@@ -589,7 +635,7 @@ def main():
             # make sure that `num_losses` is summed for distributed training
             # and average gradients over losses of all devices
             if accelerator.state.num_processes > 1:
-                num_losses = accelerator.gather(num_losses).sum()
+                num_losses = accelerator.gather_for_metrics(num_losses).sum()
                 gradient_multiplier = accelerator.state.num_processes / num_losses
                 multiply_grads(model.module.parameters(), gradient_multiplier)
             else:
@@ -597,7 +643,6 @@ def main():
 
             # update step
             if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-
                 # compute grad norm for monitoring
                 scale = (
                     accelerator.scaler._scale.item()
@@ -617,7 +662,7 @@ def main():
                     lr_scheduler.step()
                 elif accelerator.is_local_main_process:
                     progress_bar.write(
-                        "Gradients have overflown - skipping update step... " f"Updating gradient scale to {scale}..."
+                        f"Gradients have overflown - skipping update step... Updating gradient scale to {scale}..."
                     )
 
                 # update gumbel temperature
@@ -640,10 +685,10 @@ def main():
                 outputs.diversity_loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum()
-                    outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
-                    outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
-                    percent_masked = accelerator.gather(percent_masked).sum()
+                    loss = accelerator.gather_for_metrics(loss).sum()
+                    outputs.contrastive_loss = accelerator.gather_for_metrics(outputs.contrastive_loss).sum()
+                    outputs.diversity_loss = accelerator.gather_for_metrics(outputs.diversity_loss).sum()
+                    percent_masked = accelerator.gather_for_metrics(percent_masked).sum()
 
                 train_logs = {
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
@@ -669,7 +714,9 @@ def main():
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) or args.output_dir is not None:
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
-                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                    unwrapped_model.save_pretrained(
+                        args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                    )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
                     repo.push_to_hub(
@@ -704,7 +751,7 @@ def main():
 
         # sum over devices in multi-processing
         if accelerator.num_processes > 1:
-            val_logs = {k: accelerator.gather(v).sum() for k, v in val_logs.items()}
+            val_logs = {k: accelerator.gather_for_metrics(v).sum() for k, v in val_logs.items()}
 
         val_logs = {k: v / val_logs["val_num_losses"] for k, v in val_logs.items()}
 
@@ -720,7 +767,9 @@ def main():
         if args.output_dir is not None:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 if args.push_to_hub:
                     repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)

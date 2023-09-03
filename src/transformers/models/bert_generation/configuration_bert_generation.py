@@ -21,6 +21,9 @@ class BertGenerationConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BertGenerationPreTrainedModel`]. It is used to
     instantiate a BertGeneration model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the BertGeneration
+    [google/bert_for_seq_generation_L-24_bbc_encoder](https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -57,6 +60,8 @@ class BertGenerationConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -69,7 +74,7 @@ class BertGenerationConfig(PretrainedConfig):
     >>> # Initializing a BertGeneration config
     >>> configuration = BertGenerationConfig()
 
-    >>> # Initializing a model from the config
+    >>> # Initializing a model (with random weights) from the config
     >>> model = BertGenerationEncoder(configuration)
 
     >>> # Accessing the model configuration
@@ -95,7 +100,7 @@ class BertGenerationConfig(PretrainedConfig):
         eos_token_id=1,
         position_embedding_type="absolute",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

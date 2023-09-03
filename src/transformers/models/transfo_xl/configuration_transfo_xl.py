@@ -30,8 +30,8 @@ class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`TransfoXLModel`] or a [`TFTransfoXLModel`]. It is
     used to instantiate a Transformer-XL model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the [Transformer
-    XL](https://huggingface.co/transfo-xl-wt103) architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the TransfoXL
+    [transfo-xl-wt103](https://huggingface.co/transfo-xl-wt103) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -97,7 +97,7 @@ class TransfoXLConfig(PretrainedConfig):
     >>> # Initializing a Transformer XL configuration
     >>> configuration = TransfoXLConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = TransfoXLModel(configuration)
 
     >>> # Accessing the model configuration
@@ -141,7 +141,7 @@ class TransfoXLConfig(PretrainedConfig):
         init_std=0.02,
         layer_norm_epsilon=1e-5,
         eos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.cutoffs = []

@@ -24,10 +24,10 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
+from huggingface_hub.hf_api import list_models
 from torch import nn
 from tqdm import tqdm
 
-from huggingface_hub.hf_api import list_models
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 
@@ -140,17 +140,21 @@ GROUP_TO_OPUS_NAME = {
     "opus-mt-NORTH_EU-NORTH_EU": "de+nl+fy+af+da+fo+is+no+nb+nn+sv-de+nl+fy+af+da+fo+is+no+nb+nn+sv",
     "opus-mt-de-ZH": "de-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-en_el_es_fi-en_el_es_fi": "en+el+es+fi-en+el+es+fi",
-    "opus-mt-en-ROMANCE": "en-fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
-    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
-    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la",
+    "opus-mt-en-ROMANCE": (
+        "en-fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
+        "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+        "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la"
+    ),
     "opus-mt-en-CELTIC": "en-ga+cy+br+gd+kw+gv",
     "opus-mt-es-NORWAY": "es-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
     "opus-mt-fi_nb_no_nn_ru_sv_en-SAMI": "fi+nb+no+nn+ru+sv+en-se+sma+smj+smn+sms",
     "opus-mt-fi-ZH": "fi-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-fi-NORWAY": "fi-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
-    "opus-mt-ROMANCE-en": "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
-    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
-    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en",
+    "opus-mt-ROMANCE-en": (
+        "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
+        "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+        "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en"
+    ),
     "opus-mt-CELTIC-en": "ga+cy+br+gd+kw+gv-en",
     "opus-mt-sv-ZH": "sv-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-sv-NORWAY": "sv-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
@@ -181,12 +185,12 @@ def convert_hf_name_to_opus_name(hf_model_name):
 def get_system_metadata(repo_root):
     import git
 
-    return dict(
-        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
-        port_machine=socket.gethostname(),
-        port_time=time.strftime("%Y-%m-%d-%H:%M"),
-    )
+    return {
+        "helsinki_git_sha": git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+        "transformers_git_sha": git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        "port_machine": socket.gethostname(),
+        "port_time": time.strftime("%Y-%m-%d-%H:%M"),
+    }
 
 
 # docstyle-ignore
@@ -362,7 +366,7 @@ def _parse_readme(lns):
 
 def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     dname = dest_dir.name.split("-")
-    dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]), separate_vocabs=separate_vocabs)
+    dct = {"target_lang": dname[-1], "source_lang": "-".join(dname[:-1]), "separate_vocabs": separate_vocabs}
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
@@ -627,7 +631,7 @@ class OpusState:
             model.model.decoder.embed_positions.weight = wpos_tensor
 
         if cfg.normalize_embedding:
-            if not ("encoder_emb_ln_scale_pre" in state_dict):
+            if "encoder_emb_ln_scale_pre" not in state_dict:
                 raise ValueError("encoder_emb_ln_scale_pre is not in state dictionary")
             raise NotImplementedError("Need to convert layernorm_embedding")
 

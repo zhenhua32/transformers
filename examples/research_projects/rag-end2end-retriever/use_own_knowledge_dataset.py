@@ -6,10 +6,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List, Optional
 
+import faiss
 import torch
 from datasets import Features, Sequence, Value, load_dataset
 
-import faiss
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast, HfArgumentParser
 
 
@@ -49,7 +49,6 @@ def main(
     processing_args: "ProcessingArguments",
     index_hnsw_args: "IndexHnswArguments",
 ):
-
     ######################################
     logger.info("Step 1 - Create the dataset")
     ######################################
@@ -121,7 +120,10 @@ class RagExampleArguments:
     dpr_ctx_encoder_model_name: str = field(
         default="facebook/dpr-ctx_encoder-multiset-base",
         metadata={
-            "help": "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or 'facebook/dpr-ctx_encoder-multiset-base'"
+            "help": (
+                "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or"
+                " 'facebook/dpr-ctx_encoder-multiset-base'"
+            )
         },
     )
     output_dir: Optional[str] = field(
@@ -155,7 +157,9 @@ class IndexHnswArguments:
     m: int = field(
         default=128,
         metadata={
-            "help": "The number of bi-directional links created for every new element during the HNSW index construction."
+            "help": (
+                "The number of bi-directional links created for every new element during the HNSW index construction."
+            )
         },
     )
 

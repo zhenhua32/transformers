@@ -24,12 +24,12 @@ import random
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -228,7 +228,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -622,8 +621,10 @@ def main():
         "--max_seq_length",
         default=128,
         type=int,
-        help="The maximum total input sequence length after tokenization. Sequences longer "
-        "than this will be truncated, sequences shorter will be padded.",
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        ),
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -669,22 +670,29 @@ def main():
         "--initial_warmup",
         default=1,
         type=int,
-        help="Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
-        "at its `initial_threshold` value (sparsity schedule).",
+        help=(
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "at its `initial_threshold` value (sparsity schedule)."
+        ),
     )
     parser.add_argument(
         "--final_warmup",
         default=2,
         type=int,
-        help="Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
-        "at its final_threshold value (sparsity schedule).",
+        help=(
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "at its final_threshold value (sparsity schedule)."
+        ),
     )
 
     parser.add_argument(
         "--pruning_method",
         default="topK",
         type=str,
-        help="Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning, sigmoied_threshold = Soft movement pruning).",
+        help=(
+            "Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning,"
+            " sigmoied_threshold = Soft movement pruning)."
+        ),
     )
     parser.add_argument(
         "--mask_init",
@@ -717,7 +725,10 @@ def main():
         "--teacher_type",
         default=None,
         type=str,
-        help="Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for distillation.",
+        help=(
+            "Teacher type. Teacher tokenizer and student (model) tokenizer must output the same tokenization. Only for"
+            " distillation."
+        ),
     )
     parser.add_argument(
         "--teacher_name_or_path",
@@ -787,8 +798,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
 
@@ -805,7 +818,8 @@ def main():
         and not args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to"
+            " overcome."
         )
 
     # Setup CUDA, GPU & distributed training
@@ -927,9 +941,9 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
@@ -939,7 +953,7 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix)
-            result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+            result = {k + "_{}".format(global_step): v for k, v in result.items()}
             results.update(result)
 
     return results

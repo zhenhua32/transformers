@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
-_TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/reformer-crime-and-punishment",
@@ -88,7 +87,7 @@ def _get_least_common_mult_chunk_len(config):
         return config.lsh_attn_chunk_length
     elif len(attn_types_set) == 1 and attn_types[0] == "local":
         return config.local_attn_chunk_length
-    elif len(attn_types_set) == 2 and attn_types_set == set(["lsh", "local"]):
+    elif len(attn_types_set) == 2 and attn_types_set == {"lsh", "local"}:
         return np.lcm(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
@@ -104,7 +103,7 @@ def _get_min_chunk_len(config):
         return config.lsh_attn_chunk_length
     elif len(attn_types_set) == 1 and attn_types[0] == "local":
         return config.local_attn_chunk_length
-    elif len(attn_types_set) == 2 and attn_types_set == set(["lsh", "local"]):
+    elif len(attn_types_set) == 2 and attn_types_set == {"lsh", "local"}:
         return min(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
@@ -353,10 +352,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
         # save mask value here. Need fp32 and fp16 mask values
-        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
-        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5))
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3), persistent=False)
+        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5), persistent=False)
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -380,9 +379,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if do_cached_attention:
-            assert (
-                sequence_length == 1
-            ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            assert sequence_length == 1, (
+                "At the moment, auto-regressive language generation is only possible one word at a time. Make sure"
+                f" that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            )
             past_buckets = past_buckets_states[0]
             past_states = past_buckets_states[1]
 
@@ -505,9 +505,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
             if self.chunk_length is None:
-                assert (
-                    self.num_chunks_before == 0 and self.num_chunks_after == 0
-                ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+                assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
+                    "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
+                    " `config.num_chunks_before` are set to 0."
+                )
         elif do_cached_attention and past_buckets is not None:
             # use max sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx
@@ -518,7 +519,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
         # scale key vectors
-        key_vectors = self._len_and_dim_norm(query_key_vectors)
+        sqrt_num = np.sqrt(self.attention_head_size)
+        key_vectors = self._len_and_dim_norm(query_key_vectors, sqrt_num)
 
         # set query_vectors to query key vectors if LSH self attention
         query_vectors = query_vectors if query_vectors is not None else query_key_vectors
@@ -577,7 +579,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self.num_attention_heads,
             sequence_length,
             self.attention_head_size,
-        ), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
+        ), (
+            "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length,"
+            " config.attention_head_size]`."
+        )
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -661,7 +666,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # add an extra bucket for padding tokens only
             num_buckets = num_buckets + 1
             # assign padding tokens extra bucket
-            buckets_mask = attention_mask.to(torch.uint8)[:, None, None, :].expand(buckets.shape)
+            buckets_mask = attention_mask.to(torch.bool)[:, None, None, :].expand(buckets.shape)
             buckets = torch.where(
                 buckets_mask, buckets, torch.tensor(num_buckets - 1, dtype=torch.long, device=buckets.device)
             )
@@ -836,7 +841,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
-            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
             if not do_standard_self_attention:
                 # expand attn_mask to fit with key_value_bucket_idx shape
                 attention_mask = attention_mask[:, None, :]
@@ -891,7 +896,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self.num_attention_heads,
             num_hashes,
             sequence_length,
-        ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
+        ), (
+            f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"
+            f" has shape {bucket_idx.shape}."
+        )
 
         # find indices of new bucket indices
         relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
@@ -901,10 +909,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
 
         # adapt bucket_idx for batch and hidden states for index select
+        offset = torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
         bucket_idx_batch_offset = sequence_length * (
-            batch_size
-            * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
-            // relevant_bucket_idx_chunk.shape[-1]
+            batch_size * torch.div(offset, relevant_bucket_idx_chunk.shape[-1], rounding_mode="floor")
         )
 
         # add batch offset
@@ -925,12 +932,20 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         assert (
             relevant_hidden_states.shape[2]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+        ), (
+            "There should be"
+            f" {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`,"
+            f" there are {relevant_hidden_states.shape[2]} `hidden_states`."
+        )
 
         assert (
             relevant_bucket_idx_chunk.shape[-1]
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
-        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+        ), (
+            "There should be"
+            f" {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are"
+            f" {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+        )
 
         return relevant_hidden_states, relevant_bucket_idx_chunk, query_buckets
 
@@ -954,14 +969,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return indices
 
-    def _len_and_dim_norm(self, vectors):
+    def _len_and_dim_norm(self, vectors, sqrt_num):
         """
         length and attention head size dim normalization
         """
         vectors = self._len_norm(vectors)
-        vectors = vectors * torch.rsqrt(
-            torch.tensor(self.attention_head_size, device=vectors.device, dtype=vectors.dtype)
-        )
+        vectors = vectors / sqrt_num
         return vectors
 
     def _len_norm(self, x, epsilon=1e-6):
@@ -1036,8 +1049,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.dropout = config.local_attention_probs_dropout_prob
 
         # save mask value here
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -1054,9 +1067,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if use_cache and past_buckets_states[1] is not None:
-            assert (
-                past_buckets_states[0] is None
-            ), "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching hidden_states_and_buckets."
+            assert past_buckets_states[0] is None, (
+                "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching"
+                " hidden_states_and_buckets."
+            )
             key_value_hidden_states = self._retrieve_relevant_hidden_states(
                 past_buckets_states[1], self.chunk_length, self.num_chunks_before
             )
@@ -1092,14 +1106,13 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
 
         if self.chunk_length is None:
-            assert (
-                self.num_chunks_before == 0 and self.num_chunks_after == 0
-            ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
+                "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
+                " `config.num_chunks_before` are set to 0."
+            )
 
         # normalize key vectors
-        key_vectors = key_vectors / torch.sqrt(
-            torch.tensor(self.attention_head_size, device=key_vectors.device, dtype=key_vectors.dtype)
-        )
+        key_vectors = key_vectors / np.sqrt(self.attention_head_size)
 
         # get sequence length indices
         indices = torch.arange(sequence_length, device=query_vectors.device).repeat(
@@ -1209,10 +1222,9 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     def _compute_attn_mask(
         self, query_indices, key_indices, attention_mask, query_key_dots_shape, do_standard_self_attention
     ):
-
         # chunk attention mask and look before and after
         if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
 
             if not do_standard_self_attention:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
@@ -1264,7 +1276,7 @@ class ReformerAttention(nn.Module):
             self.self_attention = LSHSelfAttention(config)
         elif len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "local":
             self.self_attention = LocalSelfAttention(config)
-        elif len(set(self.attn_layers)) == 2 and set(self.attn_layers) == set(["lsh", "local"]):
+        elif len(set(self.attn_layers)) == 2 and set(self.attn_layers) == {"lsh", "local"}:
             # get correct attn layers
             if self.attn_layers[self.layer_id] == "lsh":
                 self.self_attention = LSHSelfAttention(config)
@@ -1514,9 +1526,10 @@ class ReformerLayer(nn.Module):
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
-        assert (
-            self.training
-        ), "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the model into training mode."
+        assert self.training, (
+            "If you want to train `ReformerModel` and its variations, make sure to use `model.train()` to put the"
+            " model into training mode."
+        )
 
         with torch.enable_grad():
             next_attn_output.requires_grad = True
@@ -1904,7 +1917,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
             a multiple of the relevant model's chunk lengths (lsh's, local's or both). During evaluation, the indices
             are automatically padded to be a multiple of the chunk length.
 
-            Indices can be obtained using [`ReformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1957,7 +1970,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Reformer Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare Reformer Model transformer outputting raw hidden-stateswithout any specific head on top.",
     REFORMER_START_DOCSTRING,
 )
 class ReformerModel(ReformerPreTrainedModel):
@@ -1990,7 +2003,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ReformerModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2019,6 +2031,7 @@ class ReformerModel(ReformerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()  # noqa: F841
             device = input_ids.device
         elif inputs_embeds is not None:
@@ -2146,8 +2159,8 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             attention_mask = torch.cat(
                 [
-                    torch.ones(input_shape, device=device, dtype=torch.uint8),
-                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
+                    torch.ones(input_shape, device=device, dtype=torch.bool),
+                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.bool),
                 ],
                 dim=-1,
             )
@@ -2173,15 +2186,19 @@ class ReformerModel(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
-        assert (
-            "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
-        assert (
-            "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0
-        ), f"If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not {config.lsh_num_chunks_after}."
+        assert "local" not in self.config.attn_layers or config.local_num_chunks_after == 0, (
+            "If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not"
+            f" {config.local_num_chunks_after}."
+        )
+        assert "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0, (
+            "If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not"
+            f" {config.lsh_num_chunks_after}."
+        )
 
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
@@ -2197,7 +2214,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2263,23 +2279,25 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             attentions=reformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, num_hashes=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         inputs_dict = {
             "input_ids": input_ids,
-            "past_buckets_states": past,
+            "past_buckets_states": past_key_values,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
 
         return inputs_dict
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
                 reord_buckets = layer_past[0].index_select(0, beam_idx)
@@ -2294,11 +2312,14 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerForMaskedLM(ReformerPreTrainedModel):
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+        assert not config.is_decoder, (
+            "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional"
+            " self-attention."
+        )
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
@@ -2334,18 +2355,28 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
 
         Returns:
 
+        <Tip warning={true}>
+
+        This example uses a false checkpoint since we don't have any available pretrained model for the masked language
+        modeling task with the Reformer architecture.
+
+        </Tip>
+
         Example:
 
         ```python
         >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForMaskedLM
+        >>> from transformers import AutoTokenizer, ReformerForMaskedLM
 
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
         >>> model = ReformerForMaskedLM.from_pretrained("hf-internal-testing/tiny-random-reformer")
 
         >>> # add mask_token
         >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+
+        >>> # resize model's embedding matrix
+        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size + 1)  # doctest: +IGNORE_RESULT
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -2354,8 +2385,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
 
         >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'it'
+        >>> predicted_token = tokenizer.decode(predicted_token_id)
         ```
 
         ```python
@@ -2366,8 +2396,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        7.09
+        >>> loss = round(outputs.loss.item(), 2)
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2453,10 +2482,10 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
+        >>> from transformers import AutoTokenizer, ReformerForSequenceClassification
 
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/reformer-crime-and-punishment")
+        >>> model = ReformerForSequenceClassification.from_pretrained("google/reformer-crime-and-punishment")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
 
@@ -2464,60 +2493,18 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     logits = model(**inputs).logits
 
         >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
+        >>> label = model.config.id2label[predicted_class_id]
         ```
 
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
         >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
+        ...     "google/reformer-crime-and-punishment", num_labels=num_labels
         ... )
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.69
-        ```
-
-        Example of multi-label classification:
-
-        ```python
-        >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
-
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification"
-        ... )
-
-        >>> # add pad_token
-        >>> tokenizer.add_special_tokens({"pad_token": "[PAD]"})  # doctest: +IGNORE_RESULT
-        >>> inputs = tokenizer("Hello, my dog is cute", max_length=100, padding="max_length", return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
-        ```
-
-        ```python
-        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
-        >>> num_labels = len(model.config.id2label)
-        >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
-        ... )
-        >>> model.train()  # doctest: +IGNORE_RESULT
-
-        >>> num_labels = len(model.config.id2label)
-        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
-        ...     torch.float
-        ... )
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2615,12 +2602,9 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-reformer",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="''",
-        expected_loss=3.28,
     )
     def forward(
         self,

@@ -38,7 +38,7 @@ class AlbertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
     to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ALBERT
-    [xxlarge](https://huggingface.co/albert-xxlarge-v2) architecture.
+    [albert-xxlarge-v2](https://huggingface.co/albert-xxlarge-v2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -101,7 +101,7 @@ class AlbertConfig(PretrainedConfig):
     ...     intermediate_size=3072,
     ... )
 
-    >>> # Initializing a model from the ALBERT-base style configuration
+    >>> # Initializing a model (with random weights) from the ALBERT-base style configuration
     >>> model = AlbertModel(albert_xxlarge_configuration)
 
     >>> # Accessing the model configuration
@@ -132,7 +132,7 @@ class AlbertConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

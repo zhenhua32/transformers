@@ -6,7 +6,6 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
-
 from utils_rag import save_json
 
 
@@ -29,7 +28,8 @@ def get_checkpoint_callback(output_dir, metric):
         exp = "{val_avg_em:.4f}-{step_count}"
     else:
         raise NotImplementedError(
-            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
+            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this"
+            " function."
         )
 
     checkpoint_callback = ModelCheckpoint(

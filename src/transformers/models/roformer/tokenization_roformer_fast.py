@@ -27,16 +27,24 @@ from .tokenization_utils import JiebaPreTokenizer
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
         "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_small": "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_base": "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt",
-        "junnyu/roformer_small_discriminator": "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt",
-        "junnyu/roformer_small_generator": "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt",
+        "junnyu/roformer_chinese_char_small": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_chinese_char_base": (
+            "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_discriminator": (
+            "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt"
+        ),
+        "junnyu/roformer_small_generator": (
+            "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -77,7 +85,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
 
     >>> tokenizer = RoFormerTokenizerFast.from_pretrained("junnyu/roformer_chinese_base")
     >>> tokenizer.tokenize("今天天气非常好。")
-    # ['今', '天', '天', '气', '非常', '好', '。']
+    ['今', '天', '天', '气', '非常', '好', '。']
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -98,7 +106,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

@@ -14,23 +14,30 @@
 # limitations under the License.
 """ ResNet model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
 RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
+    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
 }
 
 
-class ResNetConfig(PretrainedConfig):
+class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
+    with the defaults will yield a similar configuration to that of the ResNet
+    [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -52,6 +59,14 @@ class ResNetConfig(PretrainedConfig):
             are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
             If `True`, the first stage will downsample the inputs using a `stride` of 2.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
     ```python
@@ -59,8 +74,10 @@ class ResNetConfig(PretrainedConfig):
 
     >>> # Initializing a ResNet resnet-50 style configuration
     >>> configuration = ResNetConfig()
-    >>> # Initializing a model from the resnet-50 style configuration
+
+    >>> # Initializing a model (with random weights) from the resnet-50 style configuration
     >>> model = ResNetModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
@@ -77,7 +94,9 @@ class ResNetConfig(PretrainedConfig):
         layer_type="bottleneck",
         hidden_act="relu",
         downsample_in_first_stage=False,
-        **kwargs
+        out_features=None,
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
@@ -89,3 +108,23 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+
+
+class ResNetOnnxConfig(OnnxConfig):
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-3

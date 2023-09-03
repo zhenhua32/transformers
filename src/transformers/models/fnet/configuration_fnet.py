@@ -32,7 +32,7 @@ class FNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FNetModel`]. It is used to instantiate an FNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the FNet
-    [fnet-base](https://huggingface.co/google/fnet-base) architecture.
+    [google/fnet-base](https://huggingface.co/google/fnet-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -73,12 +73,12 @@ class FNetConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FNetModel, FNetConfig
+    >>> from transformers import FNetConfig, FNetModel
 
     >>> # Initializing a FNet fnet-base style configuration
     >>> configuration = FNetConfig()
 
-    >>> # Initializing a model from the fnet-base style configuration
+    >>> # Initializing a model (with random weights) from the fnet-base style configuration
     >>> model = FNetModel(configuration)
 
     >>> # Accessing the model configuration
@@ -103,7 +103,7 @@ class FNetConfig(PretrainedConfig):
         pad_token_id=3,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

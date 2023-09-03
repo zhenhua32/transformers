@@ -26,7 +26,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-in22k": "https://huggingface.co/microsoft/beit-base-patch16-224-in22k/resolve/main/config.json",
+    "microsoft/beit-base-patch16-224-pt22k": (
+        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
+    ),
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }
 
@@ -36,7 +38,7 @@ class BeitConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the BEiT
-    [microsoft/beit-base-patch16-224-in22k](https://huggingface.co/microsoft/beit-base-patch16-224-in22k) architecture.
+    [microsoft/beit-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit-base-patch16-224-pt22k) architecture.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8092):
@@ -102,12 +104,12 @@ class BeitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BeitModel, BeitConfig
+    >>> from transformers import BeitConfig, BeitModel
 
-    >>> # Initializing a BEiT beit-base-patch16-224-in22k style configuration
+    >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
     >>> configuration = BeitConfig()
 
-    >>> # Initializing a model from the beit-base-patch16-224-in22k style configuration
+    >>> # Initializing a model (with random weights) from the beit-base-patch16-224-pt22k style configuration
     >>> model = BeitModel(configuration)
 
     >>> # Accessing the model configuration
@@ -127,7 +129,6 @@ class BeitConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -146,7 +147,7 @@ class BeitConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -185,14 +186,13 @@ class BeitConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class BeitOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

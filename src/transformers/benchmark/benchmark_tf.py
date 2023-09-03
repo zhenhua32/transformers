@@ -60,9 +60,10 @@ def run_with_tf_optimizations(do_eager_mode: bool, use_xla: bool):
             return func(*args, **kwargs)
 
         if do_eager_mode is True:
-            assert (
-                use_xla is False
-            ), "Cannot run model in XLA, if `args.eager_mode` is set to `True`. Please set `args.eager_mode=False`."
+            if use_xla is not False:
+                raise ValueError(
+                    "Cannot run model in XLA, if `args.eager_mode` is set to `True`. Please set `args.eager_mode=False`."
+                )
             return run_in_eager_mode
         else:
             return run_in_graph_mode
@@ -77,7 +78,6 @@ def random_input_ids(batch_size: int, sequence_length: int, vocab_size: int) -> 
 
 
 class TensorFlowBenchmark(Benchmark):
-
     args: TensorFlowBenchmarkArguments
     configs: PretrainedConfig
     framework: str = "TensorFlow"
@@ -89,13 +89,15 @@ class TensorFlowBenchmark(Benchmark):
     def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         # initialize GPU on separate process
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
+        if strategy is None:
+            raise ValueError("A device strategy has to be initialized before using TensorFlow.")
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_speed(_inference)
 
     def _train_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
+        if strategy is None:
+            raise ValueError("A device strategy has to be initialized before using TensorFlow.")
         _train = self._prepare_train_func(model_name, batch_size, sequence_length)
         return self._measure_speed(_train)
 
@@ -106,7 +108,8 @@ class TensorFlowBenchmark(Benchmark):
         if self.args.is_gpu:
             tf.config.experimental.set_memory_growth(self.args.gpu_list[self.args.device_idx], True)
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
+        if strategy is None:
+            raise ValueError("A device strategy has to be initialized before using TensorFlow.")
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_inference)
 
@@ -116,7 +119,8 @@ class TensorFlowBenchmark(Benchmark):
         if self.args.is_gpu:
             tf.config.experimental.set_memory_growth(self.args.gpu_list[self.args.device_idx], True)
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
+        if strategy is None:
+            raise ValueError("A device strategy has to be initialized before using TensorFlow.")
 
         _train = self._prepare_train_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_train)
@@ -140,7 +144,8 @@ class TensorFlowBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
@@ -164,9 +169,8 @@ class TensorFlowBenchmark(Benchmark):
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
-        assert (
-            self.args.eager_mode is False
-        ), "Training cannot be done in eager mode. Please make sure that `args.eager_mode = False`."
+        if self.args.eager_mode is not False:
+            raise ValueError("Training cannot be done in eager mode. Please make sure that `args.eager_mode = False`.")
 
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
@@ -184,7 +188,8 @@ class TensorFlowBenchmark(Benchmark):
                 model = model_cls(config)
             except ImportError:
                 raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to"
+                    " set `--only_pretrain_model` or `args.only_pretrain_model=True`."
                 )
         else:
             model = TF_MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
@@ -239,15 +244,18 @@ class TensorFlowBenchmark(Benchmark):
         with self.args.strategy.scope():
             try:
                 if self.args.trace_memory_line_by_line:
-                    assert (
-                        self.args.eager_mode
-                    ), "`args.eager_mode` is set to `False`. Make sure to run model in eager mode to measure memory consumption line by line."
+                    if not self.args.eager_mode:
+                        raise ValueError(
+                            "`args.eager_mode` is set to `False`. Make sure to run model in eager mode to measure memory"
+                            " consumption line by line."
+                        )
                     trace = start_memory_tracing("transformers")
 
                 if self.args.is_tpu:
                     # tpu
                     raise NotImplementedError(
-                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.memory=False`"
+                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking"
+                        " with `args.memory=False`"
                     )
                 elif self.args.is_gpu:
                     # gpu
@@ -259,7 +267,8 @@ class TensorFlowBenchmark(Benchmark):
                         memory = "N/A"
                     else:
                         logger.info(
-                            "Measuring total GPU usage on GPU device. Make sure to not have additional processes running on the same GPU."
+                            "Measuring total GPU usage on GPU device. Make sure to not have additional processes"
+                            " running on the same GPU."
                         )
                         # init nvml
                         nvml.nvmlInit()
@@ -274,7 +283,8 @@ class TensorFlowBenchmark(Benchmark):
                     # cpu
                     if self.args.trace_memory_line_by_line:
                         logger.info(
-                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in TensorFlow."
+                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in"
+                            " TensorFlow."
                         )
                         memory = None
                     else:

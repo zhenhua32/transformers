@@ -218,9 +218,9 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
-    heads_to_prune = dict(
-        (layer, (1 - head_mask[layer].long()).nonzero().squeeze().tolist()) for layer in range(len(head_mask))
-    )
+    heads_to_prune = {
+        layer: (1 - head_mask[layer].long()).nonzero().squeeze().tolist() for layer in range(len(head_mask))
+    }
 
     assert sum(len(h) for h in heads_to_prune.values()) == (1 - head_mask.long()).sum().item()
     model.prune_heads(heads_to_prune)
@@ -338,8 +338,10 @@ def main():
         "--max_seq_length",
         default=128,
         type=int,
-        help="The maximum total input sequence length after WordPiece tokenization. \n"
-        "Sequences longer than this will be truncated, sequences shorter padded.",
+        help=(
+            "The maximum total input sequence length after WordPiece tokenization. \n"
+            "Sequences longer than this will be truncated, sequences shorter padded."
+        ),
     )
     parser.add_argument("--batch_size", default=1, type=int, help="Batch size.")
 

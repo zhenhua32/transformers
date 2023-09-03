@@ -17,8 +17,7 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-
+from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
@@ -40,7 +39,7 @@ class GPT2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
     instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-2
-    [small](https://huggingface.co/gpt2) architecture.
+    [gpt2](https://huggingface.co/gpt2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -61,11 +60,11 @@ class GPT2Config(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*, defaults to None):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
+        activation_function (`str`, *optional*, defaults to `"gelu_new"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
+        embd_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
@@ -117,12 +116,12 @@ class GPT2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GPT2Model, GPT2Config
+    >>> from transformers import GPT2Config, GPT2Model
 
     >>> # Initializing a GPT2 configuration
     >>> configuration = GPT2Config()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = GPT2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -262,8 +261,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
+            mask_dtype = ordered_inputs["attention_mask"].dtype
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
 
         return ordered_inputs

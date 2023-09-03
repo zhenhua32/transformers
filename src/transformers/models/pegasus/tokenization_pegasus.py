@@ -113,13 +113,14 @@ class PegasusTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
             if not isinstance(additional_special_tokens, list):
                 raise TypeError(
-                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                    f"additional_special_tokens should be of type {type(list)}, but is"
+                    f" {type(additional_special_tokens)}"
                 )
 
             additional_special_tokens_extended = (
@@ -134,7 +135,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
                 raise ValueError(
-                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                    "Please make sure that the provided additional_special_tokens do not contain an incorrectly"
+                    f" shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
@@ -229,8 +231,17 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""

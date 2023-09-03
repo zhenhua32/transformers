@@ -9,6 +9,8 @@ from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 if is_tf_available():
     import tensorflow as tf
 
+    from ..tf_utils import stable_softmax
+
 
 if is_torch_available():
     import torch
@@ -33,6 +35,18 @@ class FillMaskPipeline(Pipeline):
     """
     Masked language modeling prediction pipeline using any `ModelWithLMHead`. See the [masked language modeling
     examples](../task_summary#masked-language-modeling) for more information.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> fill_masker = pipeline(model="bert-base-uncased")
+    >>> fill_masker("This is a simple [MASK].")
+    [{'score': 0.042, 'token': 3291, 'token_str': 'problem', 'sequence': 'this is a simple problem.'}, {'score': 0.031, 'token': 3160, 'token_str': 'question', 'sequence': 'this is a simple question.'}, {'score': 0.03, 'token': 8522, 'token_str': 'equation', 'sequence': 'this is a simple equation.'}, {'score': 0.027, 'token': 2028, 'token_str': 'one', 'sequence': 'this is a simple one.'}, {'score': 0.024, 'token': 3627, 'token_str': 'rule', 'sequence': 'this is a simple rule.'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This mask filling pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"fill-mask"`.
@@ -101,7 +115,7 @@ class FillMaskPipeline(Pipeline):
             outputs = outputs.numpy()
 
             logits = outputs[0, masked_index, :]
-            probs = tf.nn.softmax(logits, axis=-1)
+            probs = stable_softmax(logits, axis=-1)
             if target_ids is not None:
                 probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
                 probs = tf.expand_dims(probs, 0)
@@ -136,7 +150,7 @@ class FillMaskPipeline(Pipeline):
                 # For multi masks though, the other [MASK] would be removed otherwise
                 # making the output look odd, so we add them back
                 sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
-                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode(p), "sequence": sequence}
+                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode([p]), "sequence": sequence}
                 row.append(proposition)
             result.append(row)
         if single_mask:
@@ -165,7 +179,7 @@ class FillMaskPipeline(Pipeline):
                 if len(input_ids) == 0:
                     logger.warning(
                         f"The specified target token `{target}` does not exist in the model vocabulary. "
-                        f"We cannot replace it with anything meaningful, ignoring it"
+                        "We cannot replace it with anything meaningful, ignoring it"
                     )
                     continue
                 id_ = input_ids[0]
@@ -220,7 +234,7 @@ class FillMaskPipeline(Pipeline):
             - **sequence** (`str`) -- The corresponding input with the mask token prediction.
             - **score** (`float`) -- The corresponding probability.
             - **token** (`int`) -- The predicted token id (to replace the masked one).
-            - **token** (`str`) -- The predicted token (to replace the masked one).
+            - **token_str** (`str`) -- The predicted token (to replace the masked one).
         """
         outputs = super().__call__(inputs, **kwargs)
         if isinstance(inputs, list) and len(inputs) == 1:

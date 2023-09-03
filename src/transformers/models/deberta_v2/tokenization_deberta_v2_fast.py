@@ -36,8 +36,12 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
         "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model",
-        "microsoft/deberta-v2-xxlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model",
+        "microsoft/deberta-v2-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model"
+        ),
+        "microsoft/deberta-v2-xxlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model"
+        ),
     }
 }
 
@@ -124,7 +128,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(
             vocab_file,
@@ -144,7 +148,10 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """

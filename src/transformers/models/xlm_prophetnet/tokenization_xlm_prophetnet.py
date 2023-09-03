@@ -30,7 +30,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/xprophetnet-large-wiki100-cased": "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/prophetnet.tokenizer",
+        "microsoft/xprophetnet-large-wiki100-cased": (
+            "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/prophetnet.tokenizer"
+        ),
     }
 }
 
@@ -139,7 +141,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -159,8 +161,8 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece "
-                "pip install sentencepiece"
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                " pip install sentencepiece"
             )
             raise
 
@@ -187,6 +189,10 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         for k in self.fairseq_tokens_to_ids.keys():
             self.unique_no_split_tokens.append(k)
 
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -198,8 +204,8 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece "
-                "pip install sentencepiece"
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                " pip install sentencepiece"
             )
             raise
 

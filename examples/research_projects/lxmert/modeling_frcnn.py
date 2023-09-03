@@ -169,7 +169,6 @@ def get_norm(norm, out_channels):
 
 
 def _create_grid_offsets(size: List[int], stride: int, offset: float, device):
-
     grid_height, grid_width = size
     shifts_x = torch.arange(
         offset * stride,
@@ -390,7 +389,6 @@ def assign_boxes_to_levels(
     canonical_box_size: int,
     canonical_level: int,
 ):
-
     box_sizes = torch.sqrt(torch.cat([boxes.area() for boxes in box_lists]))
     # Eqn.(1) in FPN paper
     level_assignments = torch.floor(canonical_level + torch.log2(box_sizes / canonical_box_size + 1e-8))
@@ -556,8 +554,8 @@ class Matcher(object):
         assert thresholds[0] > 0
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
-        assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])])
-        assert all([label_i in [-1, 0, 1] for label_i in labels])
+        assert all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:]))
+        assert all(label_i in [-1, 0, 1] for label_i in labels)
         assert len(labels) == len(thresholds) - 1
         self.thresholds = thresholds
         self.labels = labels
@@ -592,7 +590,7 @@ class Matcher(object):
 
         match_labels = matches.new_full(matches.size(), 1, dtype=torch.int8)
 
-        for (l, low, high) in zip(self.labels, self.thresholds[:-1], self.thresholds[1:]):
+        for l, low, high in zip(self.labels, self.thresholds[:-1], self.thresholds[1:]):
             low_high = (matched_vals >= low) & (matched_vals < high)
             match_labels[low_high] = l
 
@@ -1037,9 +1035,9 @@ class ResNet(Backbone):
             curr_kwargs = {}
             for k, v in kwargs.items():
                 if k.endswith("_per_block"):
-                    assert len(v) == num_blocks, (
-                        f"Argument '{k}' of make_stage should have the " f"same length as num_blocks={num_blocks}."
-                    )
+                    assert (
+                        len(v) == num_blocks
+                    ), f"Argument '{k}' of make_stage should have the same length as num_blocks={num_blocks}."
                     newk = k[: -len("_per_block")]
                     assert newk not in kwargs, f"Cannot call make_stage with both {k} and {newk}!"
                     curr_kwargs[newk] = v[i]
@@ -1097,7 +1095,7 @@ class ROIPooler(nn.Module):
         Returns:
             A tensor of shape(N*B, Channels, output_size, output_size)
         """
-        x = [v for v in feature_maps.values()]
+        x = list(feature_maps.values())
         num_level_assignments = len(self.level_poolers)
         assert len(x) == num_level_assignments and len(boxes) == x[0].size(0)
 
@@ -1401,7 +1399,7 @@ class AnchorGenerator(nn.Module):
 
     def grid_anchors(self, grid_sizes):
         anchors = []
-        for (size, stride, base_anchors) in zip(grid_sizes, self.strides, self.cell_anchors):
+        for size, stride, base_anchors in zip(grid_sizes, self.strides, self.cell_anchors):
             shift_x, shift_y = _create_grid_offsets(size, stride, self.offset, base_anchors.device)
             shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1)
 
@@ -1797,26 +1795,28 @@ class GeneralizedRCNN(nn.Module):
 
         if len(unexpected_keys) > 0:
             print(
-                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             print(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             print(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         else:
             print(
-                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(error_msgs) > 0:
             raise RuntimeError(

@@ -5,15 +5,15 @@ import re
 from collections import defaultdict
 
 import torch
+from accelerate import Accelerator
+from accelerate.utils import set_seed
+from arguments import HumanEvalArguments
 from datasets import load_dataset, load_metric
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
 import transformers
-from accelerate import Accelerator
-from accelerate.utils import set_seed
-from arguments import HumanEvalArguments
 from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, StoppingCriteria, StoppingCriteriaList
 
 
@@ -60,7 +60,7 @@ class EndOfFunctionCriteria(StoppingCriteria):
         decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length :])
         done = []
         for decoded_generation in decoded_generations:
-            done.append(any([stop_string in decoded_generation for stop_string in self.eof_strings]))
+            done.append(any(stop_string in decoded_generation for stop_string in self.eof_strings))
         return all(done)
 
 
@@ -186,7 +186,8 @@ def main():
         _ = code_eval_metric.compute(references=[""], predictions=[[""]])
     except ValueError as exception:
         print(
-            'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"` flag to enable code evaluation.'
+            'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"`'
+            " flag to enable code evaluation."
         )
         raise exception
 

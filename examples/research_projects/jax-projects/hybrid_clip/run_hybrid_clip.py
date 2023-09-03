@@ -32,22 +32,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import jax
+import jax.numpy as jnp
+import optax
 import torch
+from flax import jax_utils
+from flax.jax_utils import unreplicate
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, shard, shard_prng_key
+from modeling_hybrid_clip import FlaxHybridCLIP
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
 from tqdm import tqdm
 
-import jax
-import jax.numpy as jnp
-import optax
 import transformers
-from flax import jax_utils
-from flax.jax_utils import unreplicate
-from flax.training import train_state
-from flax.training.common_utils import get_metrics, shard, shard_prng_key
-from modeling_hybrid_clip import FlaxHybridCLIP
 from transformers import AutoTokenizer, HfArgumentParser, TrainingArguments, is_tensorboard_available, set_seed
 
 
@@ -77,14 +77,18 @@ class ModelArguments:
 
     text_model_name_or_path: str = field(
         metadata={
-            "help": "The text model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The text model checkpoint for weights initialization."
+                "Don't set if you want to train a model from scratch."
+            )
         },
     )
     vision_model_name_or_path: str = field(
         metadata={
-            "help": "The vision model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The vision model checkpoint for weights initialization."
+                "Don't set if you want to train a model from scratch."
+            )
         },
     )
     from_pt: bool = field(
@@ -107,7 +111,10 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -129,22 +136,28 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=72,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -519,7 +532,8 @@ def main():
 
         train_step_progress_bar.close()
         epochs.write(
-            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
+            f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate:"
+            f" {train_metric['learning_rate']})"
         )
 
         # ======================== Evaluating ==============================
@@ -537,7 +551,7 @@ def main():
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
 
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # Print metrics and update progress bar
         eval_step_progress_bar.close()
