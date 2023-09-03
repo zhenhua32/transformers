@@ -88,6 +88,9 @@ def check_number_comma(piece: str) -> bool:
 
 
 class Converter:
+    """
+    基础类, 必须实现 converted 方法
+    """
     def __init__(self, original_tokenizer):
         self.original_tokenizer = original_tokenizer
 
@@ -460,10 +463,12 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
+        # 导入模块
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
+        # 读取词表文件并解析
         with open(self.original_tokenizer.vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
@@ -527,24 +532,34 @@ class SpmConverter(Converter):
         return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
 
     def converted(self) -> Tokenizer:
+        """
+        转化流程, LlamaConverter 也是使用这个的
+        """
+        # 获取分词器
         tokenizer = self.tokenizer(self.proto)
 
+        # 更新标准化器
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
+        # 更新预处理器, LlamaConverter 没有这个流程
         replacement = "▁"
         add_prefix_space = True
         pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
         if pre_tokenizer is not None:
             tokenizer.pre_tokenizer = pre_tokenizer
 
+        # 更新解码器
         tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+
+        # 更新后处理器
         post_processor = self.post_processor()
         if post_processor:
             tokenizer.post_processor = post_processor
 
+        # 返回一个新的分词器
         return tokenizer
 
 
