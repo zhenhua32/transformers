@@ -740,12 +740,17 @@ class LlamaModel(LlamaPreTrainedModel):
 
 
 class LlamaForCausalLM(LlamaPreTrainedModel):
+    """
+    这个是主要被使用的模型
+    """
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
+        # 基础模型
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
+        # 再加上一个线性层
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
