@@ -39,17 +39,23 @@ class LlamaConfig(PretrainedConfig):
 
 
     Args:
+        词汇表数量
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LlamaModel`]
+        隐藏层大小
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
+        内部的 MLP 层大小
         intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
+        Transformer encoder 的隐藏层数
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
+        Transformer encoder 的注意力头数
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
+        key_value 头数. 这是用在 Grouped Query Attention (分组查询注意力)上的
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -63,11 +69,14 @@ class LlamaConfig(PretrainedConfig):
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232).
+        解码器使用的非线性激活函数
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
+        最大序列长度
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens,
             Llama 2 up to 4096, CodeLlama up to 16384.
+        初始化权重矩阵的截断正态分布的标准差
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -75,8 +84,12 @@ class LlamaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        捆绑词嵌入
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        RoPE embeddings 是一种位置编码的方法, 它可以将绝对位置信息和相对位置信息结合起来，用于自注意力机制中
+        RoPE 的全称是 Rotary Position Embedding, 意思是旋转位置编码。它的基本思想是用旋转矩阵来对词嵌入向量进行变换, 从而实现位置信息的编码.
+        RoPE 的优点是可以提高 Transformer 架构的性能, 同时也可以适用于线性注意力中
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):

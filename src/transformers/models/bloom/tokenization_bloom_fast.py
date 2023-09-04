@@ -49,6 +49,8 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" Bloom tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
+    没想到 transformers 中 bloom 没有普通版的分词器
+
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
@@ -99,6 +101,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    # 这里只有两个字段
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
     # No `max_model_input_sizes` as BLOOM uses ALiBi positional embeddings
