@@ -38,6 +38,10 @@ logger = logging.get_logger(__name__)
 
 class GenerationConfig(PushToHubMixin):
     r"""
+    文本生成任务的配置
+    推荐和以下文章一起看
+    https://huggingface.co/blog/how-to-generate
+    https://huggingface.co/docs/transformers/generation_strategies
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
