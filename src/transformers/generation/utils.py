@@ -790,6 +790,9 @@ class GenerationMixin:
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
+        """
+        为下一个生成做准备
+        """
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
@@ -800,12 +803,14 @@ class GenerationMixin:
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
             token_type_ids = model_kwargs["token_type_ids"]
+            # 用最后一个 token_type_ids 加一个长度
             model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
         if not is_encoder_decoder:
             # update attention mask
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
+                # 用 1 加一个长度
                 model_kwargs["attention_mask"] = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
@@ -1621,6 +1626,7 @@ class GenerationMixin:
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
+        # 来了, 最核心的部分, 使用不同的生成策略进行文本生成
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
@@ -1662,6 +1668,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
+            # 就看这个了, 贪婪搜索
             return self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
@@ -2450,7 +2457,7 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # init values
+        # init values 没有就初始化个空的
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2464,6 +2471,7 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+        # eos_token_id_tensor shape 是 [1]
         eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
@@ -2491,11 +2499,14 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
+        # 追踪序列是否完成, 一开始都是, 都是未完成的
         # keep track of which sequences are already finished
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        # 开始循环
         while True:
+            # gpu 操作, 先不看
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2506,9 +2517,11 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
+            # 准备模型输入, 需要具体的类来实现这个方法. 返回的是个字典
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            # 模型的前向传播
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -2520,8 +2533,11 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
+            # 下一个 token 的 logits. `output.logits` 的 shape 是 [batch_size, seq_len, vocab_size]
+            # next_token_logits 的shape 是 [batch_size, vocab_size]
             next_token_logits = outputs.logits[:, -1, :]
 
+            # 先经过一遍预处理, next_tokens_scores shape 是 [batch_size, vocab_size]
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
@@ -2543,16 +2559,21 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            # argmax
+            # 贪婪策略的提现, 找出概率最大的下一个 token
+            # argmax, shape 是 (batch_size, )
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                # unfinished_sequences 中未完成的是 1, 所以前半句是保留未完成的 next_tokens
+                # 后半句, 未完成的是 0, 已完成的是 1. 所以是已完成的加上 pad_token_id
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
+            # 扩充, 长度加一
             # update generated ids, model inputs, and length for next step
+            # next_tokens[:, None] 的 shape 就是 (batch_size, 1)
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
@@ -2562,10 +2583,33 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
+                """
+                这行代码的作用是更新未完成的序列，即还没有生成结束符的序列。它的逻辑是这样的：
+
+                - `next_tokens` 是一个一维张量，表示每个序列在当前步骤生成的下一个词的索引。
+                - `eos_token_id_tensor` 是一个标量张量，表示结束符的索引。
+                - `next_tokens.tile(eos_token_id_tensor.shape[0], 1)` 是将 `next_tokens` 复制 `eos_token_id_tensor.shape[0]` 次，得到一个二维张量，每一行都是 `next_tokens` 的副本。
+                - `next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1))` 是将上述二维张量与 `eos_token_id_tensor.unsqueeze(1)` 比较，得到一个布尔张量，表示每个序列生成的下一个词是否不等于结束符。
+                - `.prod(dim=0)` 是沿着第 0 维度（行）对布尔张量进行乘积运算，得到一个一维张量，表示每个序列是否从未生成过结束符。
+                - `unfinished_sequences.mul(...)` 是将原来的未完成的序列与上述一维张量相乘，得到更新后的未完成的序列。如果某个序列在当前步骤生成了结束符，那么它就会被乘以 0，变成已完成的序列。
+
+                这行代码是从 [transformers.generation_utils](^1^) 模块中复制过来的，它是用于文本生成的工具类。你可以参考它的文档和源码来了解更多细节。
+
+                源: 与必应的对话， 2023/9/9
+                (1) transformers.generation_utils — transformers 4.10.1 documentation. https://huggingface.co/transformers/v4.10.1/_modules/transformers/generation_utils.html.
+                (2) Utilities for Generation - Hugging Face. https://huggingface.co/docs/transformers/internal/generation_utils.
+                (3) Suppress HuggingFace logging warning: "Setting `pad_token_id` to `eos .... https://stackoverflow.com/questions/69609401/suppress-huggingface-logging-warning-setting-pad-token-id-to-eos-token-id.
+                (4) undefined. https://bing.com/search?q=.
+                """
                 unfinished_sequences = unfinished_sequences.mul(
+                    # eos_token_id_tensor.shape[0] 假装是 1
+                    # tile 是用来重复元素的. 经过 tile 后的 shape 是  (1, batch_size)
+                    # ne 是用来比较序列生成的下一个字符是否不是结束符, 得到 (1, batch_size)
+                    # prod 是沿着第一维度, 进行累乘, 如果有个结束符, 那么结果就是 0. 得到的shape 是 (batch_size,). 就是保留列
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
+                # 已经没有未完成的句子了
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
@@ -2599,6 +2643,7 @@ class GenerationMixin:
                     hidden_states=decoder_hidden_states,
                 )
         else:
+            # 返回的是 input_ids
             return input_ids
 
     def sample(

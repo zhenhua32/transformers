@@ -871,23 +871,33 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        """
+        准备文本生成的输入
+        """
+        # 使用 use_cache=True, 就会使用这个, 能加快解码速度
+        # 如果使用 past_key_values, 就只取最后一个 token
         if past_key_values:
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
+            # 创建 position_ids
             # create position_ids on the fly for batch generation
+            # 这是累加, 但是从 0 开始的
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
+                # 只取最后一个 token, 然后在最后添加一个新维度
                 position_ids = position_ids[:, -1].unsqueeze(-1)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
+            # 模型输入字典
             model_inputs = {"input_ids": input_ids}
 
+        # 添加别的参数
         model_inputs.update(
             {
                 "position_ids": position_ids,
