@@ -2614,10 +2614,12 @@ class GenerationMixin:
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
 
+            # 如果停止条件满足了
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
                 this_peer_finished = True
 
+            # this_peer_finished 为True, 且 synced_gpus 为 False, 就跳出循环
             if this_peer_finished and not synced_gpus:
                 break
 
