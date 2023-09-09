@@ -491,8 +491,12 @@ class GenerationMode(ExplicitEnum):
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
+    这个是文本生成的核心类
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
+        我应该先看一个, 先把最简单的贪婪策略看明白
+        https://huggingface.co/docs/transformers/generation_strategies#decoding-strategies
+        这篇文章里会告诉你常用的生成策略应该怎么配置
         - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`
         - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0` and
@@ -525,6 +529,7 @@ class GenerationMixin:
     ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
         """
         This function extracts the model-specific `inputs` for generation.
+        准备模型需要的输入
         """
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
@@ -535,8 +540,10 @@ class GenerationMixin:
         ):
             input_name = self.encoder.main_input_name
         else:
+            # 定义输入字段的名字
             input_name = self.main_input_name
 
+        # 保留 model_kwargs 中不为 None 的参数或者名字不是 input_name 的参数. 只有当 k == input_name and v == None 时, 才会被删除
         model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
 
         # 2. check whether model_input_name is passed as kwarg
@@ -556,6 +563,7 @@ class GenerationMixin:
         # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        # 同时有两个输入字段
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
             if not self.config.is_encoder_decoder:
                 has_inputs_embeds_forwarding = "inputs_embeds" in set(
@@ -591,12 +599,14 @@ class GenerationMixin:
         if inputs is not None:
             return inputs
 
+        # 有编码器输入字段
         encoder_outputs = model_kwargs.get("encoder_outputs")
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.size()[:-1]
             return torch.ones(shape, dtype=torch.long, device=self.device) * -100
 
+        # 这个时候必须有 bos_token_id
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
 
@@ -607,6 +617,7 @@ class GenerationMixin:
             if isinstance(value, torch.Tensor):
                 batch_size = value.shape[0]
                 break
+        # shape = (batch_size, 1), 用 bos_token_id 填充
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
@@ -1315,6 +1326,7 @@ class GenerationMixin:
         r"""
 
         Generates sequences of token ids for models with a language modeling head.
+        文本生成的主函数
 
         <Tip warning={true}>
 
@@ -1389,6 +1401,7 @@ class GenerationMixin:
                     - [`~generation.BeamSearchDecoderOnlyOutput`],
                     - [`~generation.BeamSampleDecoderOnlyOutput`]
 
+                编码器解码器结构有特殊的输出类
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
@@ -1412,6 +1425,7 @@ class GenerationMixin:
             # legacy: users may modify the model configuration to control generation -- update the generation config
             # model attribute accordingly, if it was created from the model config
             if self.generation_config._from_model_config:
+                # 再从模型里生成一个配置, 然后对比下配置是否改变
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:
                     warnings.warn(
@@ -1420,18 +1434,23 @@ class GenerationMixin:
                         " Please use a generation configuration file (see"
                         " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
+                    # 用新的配置替换旧的
                     self.generation_config = new_generation_config
+            # 使用当前类中定义的生成配置
             generation_config = self.generation_config
 
         generation_config = copy.deepcopy(generation_config)
+        # 用 kwargs 更新配置
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
+        # 初始化 logits 处理器和停止条件
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
+        # 如果 pad_token_id 是空的, 但是 eos_token_id 不是空的, 那么就把 pad_token_id 设置为 eos_token_id
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask", None) is None:
                 logger.warning(
@@ -1449,6 +1468,7 @@ class GenerationMixin:
         # model_input_name is defined if model-specific keyword input is passed
         # otherwise model_input_name is None
         # all model-specific keyword inputs are removed from `model_kwargs`
+        # 准备模型的输入
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
