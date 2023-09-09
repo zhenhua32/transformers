@@ -796,6 +796,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
+        前向传播的过程必看
         Returns:
 
         Example:
@@ -815,12 +816,14 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
+        # 定义一些布尔类型的参数, 传入的参数优于配置文件中的参数
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # 调用模型
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -840,9 +843,12 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
             logits = torch.cat(logits, dim=-1)
         else:
+            # 调用 lm_head
             logits = self.lm_head(hidden_states)
+        # 转换成 float
         logits = logits.float()
 
+        # 有标签的时候计算损失
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
@@ -857,6 +863,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
+            # 有 loss 的时候, loss 是返回值中的第一个位置
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 

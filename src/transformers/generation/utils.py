@@ -769,7 +769,11 @@ class GenerationMixin:
         return input_ids, model_kwargs
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
+        """
+        提取 past_key_values
+        """
         past_key_values = None
+        # 尝试从三个字段中获取
         if "past_key_values" in outputs:
             past_key_values = outputs.past_key_values
         elif "mems" in outputs:
