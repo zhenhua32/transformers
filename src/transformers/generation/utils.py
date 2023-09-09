@@ -626,16 +626,23 @@ class GenerationMixin:
         pad_token_id: Optional[int],
         eos_token_id: Optional[Union[int, List[int]]],
     ) -> torch.LongTensor:
+        """
+        初始化 attention_mask
+        """
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
+        # 输入中有 pad_token_id
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+        # 没有 eos_token_id 或者 pad_token_id 不在 eos_token_id 中
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id not in eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
+            # 不等于 pad_token_id 的位置为 1
             return inputs.ne(pad_token_id).long()
         else:
+            # 全是 1
             return torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
@@ -1484,10 +1491,13 @@ class GenerationMixin:
         else:
             model_kwargs["use_cache"] = generation_config.use_cache
 
+        # 模型的前向传播是否接受 attention_mask 参数
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
+        # encoder_outputs 不存在的时候是 True
         requires_attention_mask = "encoder_outputs" not in model_kwargs
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
+            # 需要手动初始化 attention_mask
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
