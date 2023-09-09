@@ -45,14 +45,29 @@ def _make_causal_mask(
 ):
     """
     Make causal mask used for bi-directional self-attention.
+    创建用于双向自注意力的因果掩码
     """
     bsz, tgt_len = input_ids_shape
+    """
+    这是一个用于创建一个遮罩矩阵的PyTorch代码，它可以用于Transformer模型中的自注意力机制。遮罩矩阵的作用是防止模型看到不应该看到的信息，比如未来的词或填充的词。这个代码的含义是：
+
+    - 使用 torch.full 函数创建一个形状为 (tgt_len, tgt_len) 的张量，其中 tgt_len 是目标序列的长度。这个张量的每个元素都填充为 torch.finfo(dtype).min，这是一个非常小的负数，表示 dtype 类型的浮点数的最小值。dtype 是一个参数，表示张量的数据类型。device 是一个参数，表示张量所在的设备，比如 CPU 或 GPU。
+    - 这个张量就是遮罩矩阵，它会被用于自注意力机制中的缩放点积运算。由于这个矩阵是一个下三角矩阵，它会使得每个位置只能注意到自己和之前的位置，而不能注意到之后的位置。这样就实现了因果遮罩，保证了模型不会看到未来的信息。
+    - 这个代码可以参考 [torch.full](^1^) 和 [【Pytorch】Transformer中的mask](^2^) 两个网页中的相关内容。
+
+    源: 与必应的对话， 2023/9/9
+    (1) torch.full — PyTorch 2.0 documentation. https://pytorch.org/docs/stable/generated/torch.full.html.
+    (2) 【Pytorch】Transformer中的mask - 知乎 - 知乎专栏. https://zhuanlan.zhihu.com/p/435782555.
+    (3) torch.Tensor.masked_fill — PyTorch 2.0 documentation. https://pytorch.org/docs/stable/generated/torch.Tensor.masked_fill.html.
+    """
     mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
+    # 生成一个下三角矩阵
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
+        # 和过去的组合起来
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
@@ -570,11 +585,32 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
+        # 设置 pad_token_id 和 词汇表大小
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        # 定义嵌入层, shape 是 (词汇表大小, 隐藏层大小)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        # 重复 num_hidden_layers 个 LlamaDecoderLayer
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        # 定义 RMSNorm 层
+        """
+        LlamaRMSNorm 是一种用于深度学习模型的归一化方法，它与 T5LayerNorm 等效²。它的作用是对隐藏层的状态进行标准化，以减少梯度消失或爆炸的问题。它的公式是：
+
+        $$
+        y = \frac{x - \mathrm{E}[x]}{\sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+        $$
+
+        其中，$x$ 是输入的隐藏状态，$\mathrm{E}[x]$ 和 $\mathrm{Var}[x]$ 是沿着最后一个维度计算的均值和方差，$\epsilon$ 是一个很小的正数，用于防止除零错误，$\gamma$ 和 $\beta$ 是可学习的仿射变换参数，如果 elementwise_affine 为 True，则初始化为 1 和 0¹。
+
+        LlamaRMSNorm 是 LLaMA 模型的一部分，LLaMA 是一个大规模的语言模型，可以生成各种类型的文本内容，如诗歌、故事、代码、歌词等³。
+
+        源: 与必应的对话， 2023/9/9
+        (1) minigpt4/models/modeling_llama.py · Vision-CAIR/minigpt4 at main. https://huggingface.co/spaces/Vision-CAIR/minigpt4/blob/main/minigpt4/models/modeling_llama.py.
+        (2) LayerNorm — PyTorch 2.0 documentation. https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html.
+        (3) LLaMA 超详细解读（paper & code） - 知乎 - 知乎专栏. https://zhuanlan.zhihu.com/p/632102048.
+        (4) undefined. http://www.apache.org/licenses/LICENSE-2.0.
+        """
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -589,9 +625,18 @@ class LlamaModel(LlamaPreTrainedModel):
 
     # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+        """
+        准备解码器的注意力掩码
+
+        # attention_mask shape 是 (batch_size, seq_length_with_past)
+        # 第二个参数 input_shape 是个 shape, (batch_size, seq_length)
+        # inputs_embeds 的 shape 是 (batch_size, seq_length, hidden_size)
+        """
         # create causal mask
+        # combined_attention_mask 的 shape 如下
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
+        # 也就是序列长度大于 1
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape,
@@ -605,6 +650,7 @@ class LlamaModel(LlamaPreTrainedModel):
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
                 inputs_embeds.device
             )
+            # 加起来
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
@@ -624,6 +670,10 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        """
+        来看看这个的前向传播
+        """
+        # 前面几行也是布尔判断
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -632,6 +682,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # 必须有 input_ids 或者 inputs_embeds. 但也不能同时有
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -642,36 +693,50 @@ class LlamaModel(LlamaPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
+        # 过去的序列长度
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
         if past_key_values is not None:
+            # 加上 past_key_values 的长度
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
+            # 自动构建 position_ids
             device = input_ids.device if input_ids is not None else inputs_embeds.device
+            # shape 是 (seq_length)
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
+            # shape 是 (1, seq_length). 不理解为啥是这样的shape
             position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
         else:
+            # 正常情况下, 应该是 (batch_size, seq_length)
             position_ids = position_ids.view(-1, seq_length).long()
 
         if inputs_embeds is None:
+            # 原来 inputs_embeds 这个就是通过嵌入层得到的
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
+            # 自动构建 attention_mask
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
+        # attention_mask 的 shape 是 [bsz, 1, tgt_seq_len, src_seq_len]
         attention_mask = self._prepare_decoder_attention_mask(
+            # attention_mask shape 是 (batch_size, seq_length_with_past)
+            # 第二个参数是个 shape, (batch_size, seq_length)
+            # inputs_embeds 的 shape 是 (batch_size, seq_length, hidden_size)
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 
+        # shape 是 (batch_size, seq_length, hidden_size)
         hidden_states = inputs_embeds
 
         if self.gradient_checkpointing and self.training:
+            # 不能在训练中同时使用梯度检查点和缓存
             if use_cache:
                 logger.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -683,10 +748,13 @@ class LlamaModel(LlamaPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
+        # 遍历每一层
         for idx, decoder_layer in enumerate(self.layers):
+            # 将上一层的输出保存进去
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            # 找到当前层的 past_key_value
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
@@ -705,25 +773,34 @@ class LlamaModel(LlamaPreTrainedModel):
                     position_ids,
                 )
             else:
+                # 这是推理时的, 或者是训练时没用梯度检查点的情况. 获取这一层的输出
                 layer_outputs = decoder_layer(
+                    # shape 是 (batch_size, seq_length, hidden_size)
                     hidden_states,
+                    # shape 是 [bsz, 1, tgt_seq_len, src_seq_len]
                     attention_mask=attention_mask,
+                    # shape 是 (batch_size, seq_length)
                     position_ids=position_ids,
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
 
+            # 层的第一个输出是 hidden_states
             hidden_states = layer_outputs[0]
 
             if use_cache:
+                # 保存下一个解码缓存
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
+                # 层的第二个输出是自注意力
                 all_self_attns += (layer_outputs[1],)
 
+        # 经过所有的层之后, 调用标准化层
         hidden_states = self.norm(hidden_states)
 
+        # 不要忘了最后一个层的输出
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -732,9 +809,13 @@ class LlamaModel(LlamaPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
+            # 最后一个层的输出
             last_hidden_state=hidden_states,
+            # 下一个缓存
             past_key_values=next_cache,
+            # 所有的隐藏输出
             hidden_states=all_hidden_states,
+            # 所有的自注意力输出
             attentions=all_self_attns,
         )
 
@@ -757,12 +838,18 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
+        """
+        获取输入嵌入层
+        """
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
+        """
+        获取输出嵌入层
+        """
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
@@ -772,6 +859,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model = decoder
 
     def get_decoder(self):
+        """
+        获取解码器
+        """
         return self.model
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
