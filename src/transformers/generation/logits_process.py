@@ -63,6 +63,7 @@ class LogitsWarper:
 
 class LogitsProcessorList(list):
     """
+    原来就是继承自 list 的类, 但是增加了一个 __call__ 方法, 用来对 logits 进行处理
     This class can be used to create a list of [`LogitsProcessor`] or [`LogitsWarper`] to subsequently process a
     `scores` input tensor. This class inherits from list and adds a specific *__call__* method to apply each
     [`LogitsProcessor`] or [`LogitsWarper`] to the inputs.
@@ -85,8 +86,10 @@ class LogitsProcessorList(list):
 
         """
         for processor in self:
+            # 获取函数签名
             function_args = inspect.signature(processor.__call__).parameters
             if len(function_args) > 2:
+                # 如果有参数没传递, 报错
                 if not all(arg in kwargs for arg in list(function_args.keys())[2:]):
                     raise ValueError(
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "

@@ -869,11 +869,13 @@ class GenerationMixin:
     ) -> GenerationMode:
         """
         Returns the generation mode triggered by a [`GenerationConfig`] instance.
+        判断应该使用什么样的生成策略
         """
         if generation_config.constraints is not None or generation_config.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
         elif generation_config.num_beams == 1:
             if generation_config.do_sample is False:
+                # 需要 top_k 和 penalty_alpha 都指定
                 if (
                     generation_config.top_k is not None
                     and generation_config.top_k > 1
@@ -882,6 +884,7 @@ class GenerationMixin:
                 ):
                     generation_mode = GenerationMode.CONTRASTIVE_SEARCH
                 else:
+                    # 使用贪婪策略, 先看这个
                     generation_mode = GenerationMode.GREEDY_SEARCH
             else:
                 generation_mode = GenerationMode.SAMPLE
@@ -916,12 +919,14 @@ class GenerationMixin:
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
         """
+        获取 logits 处理器
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
         instances used to modify the scores of the language model head.
         """
         # instantiate processors list
         processors = LogitsProcessorList()
 
+        # guidance_scale 制导比例尺
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             processors.append(
                 UnbatchedClassifierFreeGuidanceLogitsProcessor(
@@ -1030,9 +1035,12 @@ class GenerationMixin:
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
+        # 这个处理器应该放在最后
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
+
+        # 上面都没看
         return processors
 
     def _get_stopping_criteria(
@@ -1502,6 +1510,7 @@ class GenerationMixin:
                 inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
+        # 解码器类型的模型, 需要使用 left padding
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
@@ -1509,6 +1518,7 @@ class GenerationMixin:
             if (
                 generation_config.pad_token_id is not None
                 and len(inputs_tensor.shape) == 2
+                # 输入里有 pad_token_id
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
                 logger.warning(
@@ -1516,6 +1526,7 @@ class GenerationMixin:
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
 
+        # 编解码器结构的, 先不看
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created
             # and added to `model_kwargs`
@@ -1534,15 +1545,20 @@ class GenerationMixin:
                 device=inputs_tensor.device,
             )
         else:
+            # 获取 input_ids
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
+        # 流式输出的也先不看
         if streamer is not None:
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_length = input_ids.shape[-1]
+        input_ids_length = input_ids.shape[-1]  # 输入的长度
+        # 这个在什么时候会是 True 呢? 没有在 kwargs 中定义 max_length, 且在生成配置中定义了 max_length
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        # 如果生成配置里有 max_new_tokens
         if generation_config.max_new_tokens is not None:
+            # has_default_max_length 是 False 的时候, 就是 kwargs 里定义了 max_length, 或者 生成配置里没有定义 max_length
             if not has_default_max_length:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
@@ -1550,17 +1566,20 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
+            # 重新定义 max_length, 就是 max_new_tokens + 当前输入的长度
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
-        # 7. determine generation mode
+        # 7. determine generation mode 判断生成模式
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
+        # 不能同时使用
         if streamer is not None and (generation_config.num_beams > 1):
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
             )
 
+        # device 不匹配
         if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
@@ -1572,6 +1591,7 @@ class GenerationMixin:
                 UserWarning,
             )
 
+        # 获取 logits 处理器
         # 8. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
