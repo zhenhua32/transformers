@@ -1046,9 +1046,14 @@ class GenerationMixin:
     def _get_stopping_criteria(
         self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList]
     ) -> StoppingCriteriaList:
+        """
+        获取停止条件的数组
+        """
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
+            # 最大位置嵌入
             max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            # 最大长度限制
             criteria.append(
                 MaxLengthCriteria(
                     max_length=generation_config.max_length,
@@ -1056,7 +1061,9 @@ class GenerationMixin:
                 )
             )
         if generation_config.max_time is not None:
+            # 最大时间限制
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        # 合并自定义的, 右边的参数里是自定义的停止条件列表
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1065,10 +1072,14 @@ class GenerationMixin:
         default_list: Union[LogitsProcessorList, StoppingCriteriaList],
         custom_list: Union[LogitsProcessorList, StoppingCriteriaList],
     ) -> Union[LogitsProcessorList, StoppingCriteriaList]:
+        """
+        合并自定义的停止条件
+        """
         if len(custom_list) == 0:
             return default_list
         for default in default_list:
             for custom in custom_list:
+                # 自定义的不能有现有的重复
                 if type(custom) is type(default):
                     object_type = "stopping criteria" if isinstance(custom, StoppingCriteria) else "logits processor"
                     raise ValueError(
@@ -1078,6 +1089,7 @@ class GenerationMixin:
                         f" values. If you just want to change the default values of {object_type} consider passing"
                         f" them as arguments to `.generate()` instead of using a custom {object_type}."
                     )
+        # 扩充
         default_list.extend(custom_list)
         return default_list
 
@@ -1604,6 +1616,7 @@ class GenerationMixin:
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
+        # 停止条件
         # 9. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria

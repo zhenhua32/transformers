@@ -122,12 +122,20 @@ class MaxTimeCriteria(StoppingCriteria):
 
 
 class StoppingCriteriaList(list):
+    """
+    也是继承自 list 的
+    """
+
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        # 有任一条件满足就返回 True
         return any(criteria(input_ids, scores) for criteria in self)
 
     @property
     def max_length(self) -> Optional[int]:
+        """
+        获取最大长度
+        """
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
                 return stopping_criterium.max_length
