@@ -237,6 +237,7 @@ class GenerationConfig(PushToHubMixin):
     """
 
     def __init__(self, **kwargs):
+        # 控制输出的长度
         # Parameters that control the length of the output
         # if the default `max_length` is updated here, make sure to update the `generate` tests following https://github.com/huggingface/transformers/pull/25030
         self.max_length = kwargs.pop("max_length", 20)
@@ -246,13 +247,16 @@ class GenerationConfig(PushToHubMixin):
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)
 
+        # 控制生成策略
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", False)
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
+        # 惩罚系数
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.use_cache = kwargs.pop("use_cache", True)
 
+        # 修改模型的输出 logits
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
@@ -280,6 +284,7 @@ class GenerationConfig(PushToHubMixin):
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.low_memory = kwargs.pop("low_memory", None)
 
+        # 定义输出的变量
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.output_attentions = kwargs.pop("output_attentions", False)
@@ -287,11 +292,13 @@ class GenerationConfig(PushToHubMixin):
         self.output_scores = kwargs.pop("output_scores", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
+        # 生成时会使用到的特殊 token
         # Special tokens that can be used at generation time
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
 
+        # 编解码器结构模型独有的生成参数
         # Generation parameters exclusive to encoder-decoder models
         self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
@@ -305,10 +312,12 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
+        # 如果 _from_model_config 是 False
         # Additional attributes without default values
         if not self._from_model_config:
             # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a
             # model's default configuration file
+            # 将其他的参数赋值给 self
             for key, value in kwargs.items():
                 try:
                     setattr(self, key, value)
@@ -316,6 +325,7 @@ class GenerationConfig(PushToHubMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
+        # 验证所有的属性
         # Validate the values of the attributes
         self.validate(is_init=True)
 
@@ -325,10 +335,11 @@ class GenerationConfig(PushToHubMixin):
 
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
-        # ignore metadata
+        # ignore metadata 忽略元数据
         for metadata_field in ("_from_model_config", "_commit_hash", "transformers_version"):
             self_dict.pop(metadata_field, None)
             other_dict.pop(metadata_field, None)
+        # 验证两个字典是否相等
         return self_dict == other_dict
 
     def __repr__(self):
@@ -737,6 +748,7 @@ class GenerationConfig(PushToHubMixin):
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+        # 他们是这么写的, 先读取, 然后加载成字典. 而不是直接用 json.load 读取
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
@@ -760,6 +772,7 @@ class GenerationConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
+        # 保留 config_dict 中的 _commit_hash
         # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
@@ -767,6 +780,7 @@ class GenerationConfig(PushToHubMixin):
         # The line below allows model-specific config to be loaded as well through kwargs, with safety checks.
         # See https://github.com/huggingface/transformers/pull/21269
         config = cls(**{**config_dict, **kwargs})
+        # 这样的合并, 居然能保留 kwargs 中不要的字段. 这是因为 cls 实例化的时候, 都是对 kwargs 进行 pop 的, 有用的字段都取出来了
         unused_kwargs = config.update(**kwargs)
 
         logger.info(f"Generate config {config}")
