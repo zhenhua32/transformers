@@ -148,6 +148,7 @@ class LlamaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 
+        # 如果没有指定, 就是和 num_attention_heads 一样
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads

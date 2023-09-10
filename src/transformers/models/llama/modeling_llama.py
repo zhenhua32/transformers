@@ -105,6 +105,9 @@ class LlamaRMSNorm(nn.Module):
 
 
 class LlamaRotaryEmbedding(torch.nn.Module):
+    """
+    旋转位置嵌入
+    """
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -193,6 +196,11 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    """
+    应用旋转位置编码
+    q 的 shape 是 (batch_size, num_heads, seq_len, head_dim)
+    k 的 shape 是 (batch_size, num_key_value_heads, seq_len, head_dim)
+    """
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
@@ -208,6 +216,7 @@ class LlamaMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
+        # 据说用了 SwiGLU 后, 维度会从 4d 变成 2/3(4d)
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -250,17 +259,23 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class LlamaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper
+    注意力层
+    """
 
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+        # 每个头的维度
         self.head_dim = self.hidden_size // self.num_heads
+        # num_key_value_heads 默认是和 num_attention_heads (即 num_heads) 一样的
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        # 最大位置嵌入
         self.max_position_embeddings = config.max_position_embeddings
+        # rope_theta 默认是 10000.0, 即一万
         self.rope_theta = config.rope_theta
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
@@ -268,14 +283,20 @@ class LlamaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
+        # shape 是 (hidden_size, num_heads * head_dim), 也就是 (hidden_size, hidden_size)
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        # shape 是 (hidden_size, hidden_size)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self._init_rope()
 
     def _init_rope(self):
+        """
+        初始化 RoPE, 也就是旋转位置编码
+        """
         if self.config.rope_scaling is None:
+            # 默认是空的, 应该用这个
             self.rotary_emb = LlamaRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
@@ -313,6 +334,10 @@ class LlamaAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """
+        自注意力的前向传播
+        """
+        # hidden_states 的 shape 是 (batch_size, seq_len, hidden_size)
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
@@ -333,31 +358,42 @@ class LlamaAttention(nn.Module):
             value_states = torch.cat(value_states, dim=-1)
 
         else:
+            # 看这里, 更简单些, 上面是张量并行. 对 hidden_states 进行三种线性变换
+            # shape 是 (batch_size, seq_len, num_heads * head_dim)
             query_states = self.q_proj(hidden_states)
+            # shape 是 (batch_size, seq_len, num_key_value_heads * head_dim)
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
+        # 现在 shape 是 (batch_size, num_heads, seq_len, head_dim)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # shape 是 (batch_size, num_key_value_heads, seq_len, head_dim)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
+            # 如果有过去的 key_value
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # 应用旋转位置编码
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
+            # 就是在 seq_len 这个维度上加一, 另外就是注意这个是放在最前面的
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
+        # 使用缓存, 就是保留这两个状态
         past_key_value = (key_states, value_states) if use_cache else None
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        # 这一步就是计算注意力权重, 就是 QK^T / sqrt(d_k)
+        # shape 是 (batch_size, num_heads, seq_len, seq_len)
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
@@ -371,10 +407,14 @@ class LlamaAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
+            # 使用注意力掩码
             attn_weights = attn_weights + attention_mask
 
+        # 应用 softmax
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # 再和 V 的矩阵乘法
+        # shape 是 (batch_size, num_heads, seq_len, head_dim)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -383,7 +423,9 @@ class LlamaAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
+        # shape 是 (batch_size, seq_len, num_heads, head_dim)
         attn_output = attn_output.transpose(1, 2).contiguous()
+        # shape 是 (batch_size, seq_len, hidden_size)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         if self.config.pretraining_tp > 1:
@@ -391,18 +433,24 @@ class LlamaAttention(nn.Module):
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
         else:
+            # 最后经过一个 o_proj 层
             attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
 
+        # 固定返回三个字段
         return attn_output, attn_weights, past_key_value
 
 
 class LlamaDecoderLayer(nn.Module):
+    """
+    这是解码层
+    """
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
+        # 主要有 4 个模块
         self.self_attn = LlamaAttention(config=config)
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -433,8 +481,10 @@ class LlamaDecoderLayer(nn.Module):
 
         residual = hidden_states
 
+        # 对输入进行标准化
         hidden_states = self.input_layernorm(hidden_states)
 
+        # 调用自注意力层
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -444,12 +494,16 @@ class LlamaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
+        # 残差连接
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
+        # 再过一次标准化
         hidden_states = self.post_attention_layernorm(hidden_states)
+        # 经过 mlp 层
         hidden_states = self.mlp(hidden_states)
+        # 依然是残差连接
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)

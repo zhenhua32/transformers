@@ -114,6 +114,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        # 这里是默认添加 bos_token, 但不添加 eos_token
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
