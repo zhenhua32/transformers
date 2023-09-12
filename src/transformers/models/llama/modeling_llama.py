@@ -93,13 +93,17 @@ class LlamaRMSNorm(nn.Module):
         LlamaRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
+        # 定义一个可学习的权重
         self.weight = nn.Parameter(torch.ones(hidden_size))
+        # 用于防止除0错误
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
+        # 求方差, 就是求平方的均值
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # rsqrt 是 reciprocal square root 的缩写, 就是先求平方根, 再取倒数
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
