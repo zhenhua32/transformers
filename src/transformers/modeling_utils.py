@@ -582,6 +582,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                         if torch.distributed.get_rank() == 0:
                             module._load_from_state_dict(*args)
             else:
+                # 调用内部的 _load_from_state_dict 方法
                 module._load_from_state_dict(*args)
 
         # 递归
@@ -589,6 +590,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
             if child is not None:
                 load(child, state_dict, prefix + name + ".")
 
+    # 开始加载模型的权重
     load(model_to_load, state_dict, prefix=start_prefix)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
@@ -3547,6 +3549,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ignore_mismatched_sizes,
         ):
             mismatched_keys = []
+            # 只有当 ignore_mismatched_sizes 为 True 时，才会进行判断
             if ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
                     # If the checkpoint is sharded, we may not have the key here.
@@ -3560,6 +3563,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                         model_key = ".".join(checkpoint_key.split(".")[1:])
 
+                    # shape 的大小不匹配的时候
                     if (
                         model_key in model_state_dict
                         and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
@@ -3630,16 +3634,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 disk_only_shard_files = []
 
             if len(resolved_archive_file) > 1:
+                # 看看这里是怎么加载模型检查点分片的
                 resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
+            # 遍历所有的分片文件
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
+                # 加载当前分片文件
                 state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
+                    # 第一个参数是当前从文件中加载的
                     state_dict,
                     model_state_dict,
                     original_loaded_keys,
@@ -3679,8 +3687,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                         model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                 else:
+                    # 将权重加载进网络中, 应该要看下这个
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
+                # 释放内存
                 # force memory release
                 del state_dict
                 gc.collect()
