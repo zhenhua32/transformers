@@ -93,7 +93,7 @@ class LlamaRMSNorm(nn.Module):
         LlamaRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        # 定义一个可学习的权重
+        # 定义一个可学习的权重, shape 是 (hidden_size,)
         self.weight = nn.Parameter(torch.ones(hidden_size))
         # 用于防止除0错误
         self.variance_epsilon = eps
@@ -118,6 +118,30 @@ class LlamaRotaryEmbedding(torch.nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
+        """
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)) 是一段 PyTorch 的代码，它的意思是计算一个张量 inv_freq，它的每个元素是一个逆频率值，用于表示不同维度的位置编码。这段代码可能出现在一些自然语言处理的模型中，比如 LLaMA 或者 Alpaca。下面我简单解释一下这段代码的作用和原理：
+
+        - self.base 是一个标量，它表示一个基数，用于控制逆频率的变化速度。一般来说，self.base 越大，逆频率变化越慢，反之亦然。self.base 的值可以根据不同的任务和数据进行调整。
+        - self.dim 是一个标量，它表示一个向量的维度，也就是位置编码的维度。一般来说，self.dim 越大，位置编码能够表示更多的信息，反之亦然。self.dim 的值可以根据不同的模型和层进行设置。
+        - torch.arange(0, self.dim, 2) 是一个函数，它返回一个从 0 到 self.dim - 2 的等差数列，步长为 2。这个函数的作用是生成一个包含所有偶数维度的索引序列。例如，如果 self.dim = 10，那么 torch.arange(0, self.dim, 2) 就会返回 [0, 2, 4, 6, 8]。
+        - .float() 是一个方法，它将一个整数类型的张量转换为浮点数类型的张量。这个方法的作用是为了后续的除法运算。
+        - .to(device) 是一个方法，它将一个张量复制到指定的设备上，比如 CPU 或者 GPU。这个方法的作用是为了提高计算效率和内存利用率。
+        - / self.dim 是一个运算符，它表示对张量中的每个元素进行除法运算。这个运算符的作用是将索引序列归一化到 [0, 1] 区间内。
+        - self.base ** (...) 是一个运算符，它表示对张量中的每个元素进行幂运算。这个运算符的作用是将归一化后的索引序列映射到不同的尺度上。
+        - 1.0 / (...) 是一个运算符，它表示对张量中的每个元素进行倒数运算。这个运算符的作用是将幂运算后的索引序列转换为逆频率值。
+
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)) 的最终结果是一个形状为 (self.dim // 2,) 的张量 inv_freq，它包含了所有偶数维度的逆频率值。这些逆频率值可以与正弦或者余弦函数相乘，得到不同维度的位置编码。位置编码可以与输入向量相加，增加位置信息。
+
+        你可以参考以下的网页¹²³来了解更多关于 PyTorch 和位置编码的知识。希望这能回答你的问题。😊
+
+        源: 与必应的对话， 2023/9/12
+        (1) torch.arange — PyTorch 2.0 documentation. https://pytorch.org/docs/stable/generated/torch.arange.html.
+        (2) Pytorch: IndexError: index out of range in self. How to solve?. https://stackoverflow.com/questions/62081155/pytorch-indexerror-index-out-of-range-in-self-how-to-solve.
+        (3) GitHub: Let’s build from here · GitHub. https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/convert_llama_weights_to_hf.py.
+        (4) undefined. https://stackoverflow.com/questions/51433378/what-does-model-train-do-in-pytorch%29.
+        (5) undefined. https://stackoverflow.com/questions/48001598/why-do-we-need-to-call-zero-grad-in-pytorch%29.
+        (6) undefined. https://huggingface.co/transformers/v2.2.0/model_doc/bert.html.
+        """
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
