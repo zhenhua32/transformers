@@ -229,6 +229,7 @@ def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
+    # 这是将后半的变成负的, 然后放到前面. shape 是不变的
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -237,14 +238,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     应用旋转位置编码
     q 的 shape 是 (batch_size, num_heads, seq_len, head_dim)
     k 的 shape 是 (batch_size, num_key_value_heads, seq_len, head_dim)
+    position_ids 的 shape 是 (batch_size, seq_len)
     """
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    # 它对 q 和 k 进行旋转操作，也就是将每个向量的前半部分和后半部分交换位置；然后用 cos 和 sin 分别与 q 和 k 相乘，并相加，得到旋转后的 q_embed 和 k_embed.
+    # 它们的形状都是 (bs, n_heads, seq_len, dim)。
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    # 旋转位置编码的作用是在不改变向量范数的情况下，增加位置信息，并且避免了线性关系的限制
     return q_embed, k_embed
 
 
@@ -412,6 +417,7 @@ class LlamaAttention(nn.Module):
         if past_key_value is not None:
             # 如果有过去的 key_value
             kv_seq_len += past_key_value[0].shape[-2]
+        # 这边知识获取 cos 和 sin
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # 应用旋转位置编码
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
