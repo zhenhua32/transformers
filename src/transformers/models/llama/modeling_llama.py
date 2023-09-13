@@ -151,12 +151,18 @@ class LlamaRotaryEmbedding(torch.nn.Module):
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
+        # 最大序列长度的缓存
         self.max_seq_len_cached = seq_len
+        # 从 0 到 self.max_seq_len_cached - 1 的等差数列
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
+        # 它使用 torch.einsum 函数计算每个位置索引与每个逆频率值的乘积，得到一个形状为 (self.max_seq_len_cached, self.dim // 2) 的张量 freqs，
+        # 表示每个位置在每个偶数维度上的频率值。
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # shape 重新变成 (self.max_seq_len_cached, self.dim)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
+        # shape 是 (1, 1, max_seq_len_cached, dim)
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
@@ -165,6 +171,9 @@ class LlamaRotaryEmbedding(torch.nn.Module):
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
+        # 取出前 seq_len 个
+        # … 是一种省略符，它用于表示多维数组中的多个冒号。如果一个数组有多个维度，那么可以用 … 来代替中间的维度，表示对所有的子数组进行相同的切片操作。
+        # 例如，如果 object 是一个三维数组，那么 object[…, 0] 表示取出每个子数组的第一个元素。
         return (
             self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
