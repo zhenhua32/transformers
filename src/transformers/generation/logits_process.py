@@ -275,13 +275,18 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] that prevents the repetition of previous tokens through an exponential penalty. This technique
     shares some similarities with coverage mechanisms and other aimed at reducing repetition. During the text
     generation process, the probability distribution for the next token is determined using a formula that incorporates
-    token scores based on their occurrence in the generated sequence. Tokens with higher scores are less likely to be
+    token scores based on their occurrence in the generated sequence. Tokens with higher scores are more likely to be
     selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
     paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
 
+    This technique can also be used to reward and thus encourage repetition in a similar manner. To penalize and reduce
+    repetition, use `penalty` values above 1.0, where a higher value penalizes more strongly. To reward and encourage
+    repetition, use `penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
+
     Args:
-        repetition_penalty (`float`):
-            The parameter for repetition penalty. 1.0 means no penalty. See [this
+        penalty (`float`):
+            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
+            tokens. Between 0.0 and 1.0 rewards previously generated tokens. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
 
     Examples:
@@ -316,7 +321,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         score = torch.gather(scores, 1, input_ids)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, input_ids, score)
@@ -325,13 +330,20 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
+    [`LogitsProcessor`] that avoids hallucination by boosting the probabilities of tokens found within the original
+    input.
+
+    This technique can also be used to reward and thus encourage hallucination (or creativity) in a similar manner. To
+    penalize and reduce hallucination, use `penalty` values above 1.0, where a higher value penalizes more strongly. To
+    reward and encourage hallucination, use `penalty` values between 0.0 and 1.0, where a lower value rewards more
+    strongly.
 
     Args:
-        hallucination_penalty (`float`):
-            The parameter for hallucination penalty. 1.0 means no penalty.
+        penalty (`float`):
+            The parameter for hallucination penalty. 1.0 means no penalty. Above 1.0 penalizes hallucination. Between
+            0.0 and 1.0 rewards hallucination.
         encoder_input_ids (`torch.LongTensor`):
-            The encoder_input_ids that should not be repeated within the decoder ids.
+            The encoder_input_ids that should be repeated within the decoder ids.
     """
 
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
@@ -345,7 +357,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         score = torch.gather(scores, 1, self.encoder_input_ids)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, self.encoder_input_ids, score)
@@ -360,7 +372,7 @@ class TopPLogitsWarper(LogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -422,7 +434,7 @@ class TopKLogitsWarper(LogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -450,9 +462,9 @@ class TypicalLogitsWarper(LogitsWarper):
     Generation](https://arxiv.org/abs/2202.00666) for more information.
 
     Args:
-        mass (`float`):
+        mass (`float`, *optional*, defaults to 0.9):
             Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -502,7 +514,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     Args:
         epsilon (`float`):
             If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -575,7 +587,7 @@ class EtaLogitsWarper(LogitsWarper):
         epsilon (`float`):
             A float value in the range (0, 1). Hyperparameter used to calculate the dynamic cutoff value, `eta`. The
             suggested values from the paper ranges from 3e-4 to 4e-3 depending on the size of the model.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All values that are found to be below the dynamic cutoff value, `eta`, are set to this float value. This
             parameter is useful when logits need to be modified for very low probability tokens that should be excluded
             from generation entirely.
@@ -1300,8 +1312,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
 
 class ExponentialDecayLengthPenalty(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been
-    reached.
+    [`LogitsProcessor`] that exponentially increases the score of the `eos_token_id` after `start_index` has been
+    reached. This allows generating shorter sequences without having a hard cutoff, allowing the `eos_token` to be
+    predicted in a meaningful position.
 
     Args:
         exponential_decay_length_penalty (`tuple(int, float)`):
@@ -1311,6 +1324,51 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         input_ids_seq_length (`int`):
             The length of the input sequence.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+
+    >>> set_seed(1)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    >>> text = "Just wanted to let you know, I"
+    >>> inputs = tokenizer(text, return_tensors="pt")
+
+    >>> # Generate sequences without exponential penalty. We want short sentences, so we limit max_length=30
+    >>> # see that the answer tends to end abruptly
+    >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256)
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I'm not even a lawyer. I'm a man. I have no real knowledge of politics. I'm a
+
+    >>> # Generate sequences with exponential penalty, we add the exponential_decay_length_penalty=(start_index, decay_factor)
+    >>> # We see that instead of cutting at max_tokens, the output comes to an end before (at 25 tokens) and with more meaning
+    >>> # What happens is that starting from `start_index` the EOS token score will be increased by decay_factor exponentially
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.6),
+    ... )
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I've got a very cool t-shirt educating people on how to use the Internet<|endoftext|>
+
+    >>> # Generate sequences with smaller decay_factor, still improving the hard cutoff mid-sentence
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.05),
+    ... )
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I've been working on it for about 6 months and now it's in Alpha.<|endoftext|>
+    ```
     """
 
     def __init__(
@@ -1330,7 +1388,9 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
             for i in self.eos_token_id:
-                scores[:, i] = scores[:, i] * pow(self.regulation_factor, cur_len - self.regulation_start)
+                penalty_idx = cur_len - self.regulation_start
+                # To support negative logits we compute the penalty of the absolute value and add to the original logit
+                scores[:, i] = scores[:, i] + torch.abs(scores[:, i]) * (pow(self.regulation_factor, penalty_idx) - 1)
         return scores
 
 
@@ -1400,8 +1460,15 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
-    probs to `inf` so that they are sampled at their corresponding index.
+
+    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription. When the input
+    tokens are at a specific threshold, the processor sets the scores to negative infinity. The processor makes sure
+    that timestamp tokens appear in pairs, by masking out the logits that would break this pairing pattern. This is
+    done to maintain the consistency and structure of generated timestamps. It also ensures that when the predicted
+    probability of sampling any of the timestamp token is greater than any individual non-timestamp token, those
+    non-timestamp logits are set to negative infinity. This is done to ensure the generation of timestamps over other
+    potential tokens.
+
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
@@ -1415,6 +1482,34 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 max_initial_timestamp_index (`int`, *optional*, defaults to 1):
                     Used to set the maximum value of the initial timestamp. This is used to prevent the model from
                     predicting timestamps that are too far in the future.
+
+    Examples:
+    ``` python
+    >>> import torch
+    >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
+    >>> from datasets import load_dataset
+
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
+    >>> input_features = inputs.input_features
+
+    >>> #Displaying timestamps
+    >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    >>> print("Transcription:", transcription)
+    Transcription: <|startoftranscript|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can<|6.44|><|6.44|> discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>
+
+
+    >>> #No timestamps & change EOS:
+    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word "can"(460)
+    >>> model.generation_config.eos_token_id = 460
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=False)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print("Transcription:", transcription)
+    Transcription:  He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can
+    ```
     """
 
     def __init__(self, generate_config):  # support for the kwargs
@@ -1555,18 +1650,15 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality. A value smaller than 1 has the opposite effect, while
             making the negative prompt provided with negative_prompt_ids (if any) act as a positive prompt.
-        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
-            the last token of the prompt.
-        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
-            Attention mask for unconditional_ids.
         model (`PreTrainedModel`):
             The model computing the unconditional scores. Supposedly the same as the one computing the conditional
             scores. Both models must use the same tokenizer.
-        smooth_factor (`float`, **optional**):
-            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
-            CFG. Turn it lower if the output degenerates.
-        use_cache (`bool`, **optional**):
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Attention mask for unconditional_ids.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether to cache key/values during the negative prompt forward pass.
 
 

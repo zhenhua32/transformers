@@ -790,6 +790,31 @@ class NllbConverter(SpmConverter):
         )
 
 
+class SeamlessM4TConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<pad>", 0.0),
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        return self.original_tokenizer.unk_token_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="__eng__ $A </s>",
+            pair="__eng__ $A $B </s>",
+            special_tokens=[
+                ("__eng__", self.original_tokenizer.convert_tokens_to_ids("__eng__")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -1184,7 +1209,13 @@ class LlamaConverter(SpmConverter):
         # 获取词汇表
         vocab_scores = self.vocab(proto)
         if model_type == 1:
-            raise RuntimeError("Llama is supposed to be a BPE model!")
+            import tokenizers
+
+            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
+            else:
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
+
         elif model_type == 2:
             # TODO: 具体看下这个是提取了什么信息
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
@@ -1197,9 +1228,9 @@ class LlamaConverter(SpmConverter):
             # 添加特殊 token
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>"),
-                    AddedToken("<s>"),
-                    AddedToken("</s>"),
+                    AddedToken("<unk>", normalized=False, special=True),
+                    AddedToken("<s>", normalized=False, special=True),
+                    AddedToken("</s>", normalized=False, special=True),
                 ]
             )
         else:
@@ -1224,39 +1255,8 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        """
-        后处理部分
-        """
-        # 3 possible case :
-        # - add_bos and add_eos : '<s>:0 $A:0 </s>:0' and '<s>:0 $A:0 </s>:0 <s>:1 $B:1 </s>:1'
-        # - add_bos: '<s>:0 $A:0' and '<s>:0 $A:0 <s>:1 $B:1'
-        # - add_eos: '$A:0 </s>:0' and '$A:0 </s>:0 $B:1 </s>:1'
-
-        # 是否添加开始符号和结束符号
-        add_bos = self.original_tokenizer.add_bos_token
-        add_eos = self.original_tokenizer.add_eos_token
-        if add_bos or add_eos:
-            # 获取原始分词器中的开始符号和结束符号
-            bos = self.original_tokenizer.bos_token  # 一般是 <s>
-            bos_token_id = self.original_tokenizer.bos_token_id
-
-            eos = self.original_tokenizer.eos_token  # 一般是 </s>
-            eos_token_id = self.original_tokenizer.eos_token_id
-
-            # true 就是1, false 就是0, 就不会加
-            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
-            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
-
-            special_tokens = []
-            if add_bos:
-                special_tokens.append((bos, bos_token_id))
-            if add_eos:
-                special_tokens.append((eos, eos_token_id))
-            # 返回一个模板预处理器
-            return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
-
-        else:
-            return None
+        # the processor is defined in the LlamaTokenizerFast class.
+        return None
 
 
 class MarkupLMConverter(Converter):
@@ -1342,6 +1342,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
+    "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "WhisperTokenizer": WhisperConverter,

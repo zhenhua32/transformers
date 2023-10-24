@@ -57,6 +57,7 @@ class Trie:
 
     def __init__(self):
         self.data = {}
+        self._tokens = set()
 
     def add(self, word: str):
         """
@@ -82,6 +83,8 @@ class Trie:
         if not word:
             # Prevent empty string
             return
+
+        self._tokens.add(word)
         ref = self.data
         # 将每个字母添加到 trie 树中
         for char in word:
@@ -375,15 +378,27 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
 
     def __init__(self, **kwargs):
+        # 1. Init the parent class
+
+        self.tokens_trie = Trie()
+
+        # 2. init `_added_tokens_decoder` if child class did not
+        if not hasattr(self, "_added_tokens_decoder"):
+            self._added_tokens_decoder: Dict[int, AddedToken] = {}
+
+        # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
+        self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
+        self._added_tokens_encoder: Dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
+
+        # 4 init the parent class
         super().__init__(**kwargs)
 
-        # Added tokens - We store this for both slow and fast tokenizers
-        # until the serialization of Fast tokenizers is updated
-        self.added_tokens_encoder: Dict[str, int] = {}
-        self.added_tokens_decoder: Dict[int, str] = {}
-        self.unique_no_split_tokens: List[str] = []
-        # 构建一个 trie 树, 用来保存 token
-        self.tokens_trie = Trie()
+        # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
+        self._add_tokens(
+            [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
+            special_tokens=True,
+        )
 
         self._decode_use_source_tokenizer = False
 
@@ -398,33 +413,67 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         raise NotImplementedError
 
-    def get_added_vocab(self) -> Dict[str, int]:
+    @property
+    def added_tokens_encoder(self) -> Dict[str, int]:
         """
-        获取添加的词汇
-        Returns the added tokens in the vocabulary as a dictionary of token to index.
+        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
+        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        """
+        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
 
         Returns:
             `Dict[str, int]`: The added tokens.
         """
-        return self.added_tokens_encoder
+        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
+
+    @added_tokens_decoder.setter
+    def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
+        # Always raise an error if string because users should define the behavior
+        for index, token in value.items():
+            if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
+                raise ValueError(
+                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
+                )
+
+            self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
+            self._added_tokens_encoder[str(token)] = index
+
+    def get_added_vocab(self) -> Dict[str, int]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
+        the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
+        something we should change.
+
+        Returns:
+            `Dict[str, int]`: The added tokens.
+        """
+        return self._added_tokens_encoder
 
     def __len__(self):
         """
-        当前词汇表的长度, 包含原始词汇表的长度, 加上 added_tokens_encoder 的长度
-        Size of the full vocabulary with the added tokens.
+        Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
+        there is a hole in the vocab, we will add tokenizers at a wrong index.
         """
-        return self.vocab_size + len(self.added_tokens_encoder)
+        return len(set(self.get_vocab().keys()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
         添加 tokens
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
+        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
+        vocab which is why they have to be handled specifically.
 
         Args:
             new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-                Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the `unk_token` to them).
+                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary
+                (tested by checking if the tokenizer assign the index of the `unk_token` to them). If a token is part
+                of the vocabulary then we simply mark this token as an `AddedToken` which allows to control the
+                stripping and normalization of this token. This is NOT possible in `tokenizers`.
             special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
@@ -443,61 +492,60 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
-        # 转成字符串
-        new_tokens = [str(tok) for tok in new_tokens]
-
-        tokens_to_add = []
+        added_tokens = 0
+        if new_tokens is None:
+            return added_tokens
+        # TODO this is fairly slow to improve!
+        current_vocab = self.get_vocab().copy()
+        new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
-            # 这原本不应该发生的, 毕竟前面都已经调用过 str 函数了
-            if not isinstance(token, str):
+            if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
-            # 如果不是特殊 token, 且开启了 do_lower_case
-            if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
-                token = token.lower()
-            # 如果不是 unk_token, 第二个判读是说这个 token 不在词汇表中
-            if (
-                token != self.unk_token
-                and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in tokens_to_add
-            ):
-                tokens_to_add.append(token)
-                if self.verbose:
-                    logger.info(f"Adding {token} to the vocabulary")
-
-        # 从当前的长度开始计数, encoder 是 token => index, decoder 是 index => token
-        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
-        added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-        self.added_tokens_encoder.update(added_tok_encoder)
-        self.added_tokens_decoder.update(added_tok_decoder)
-
-        # 添加到 unique_no_split_tokens 中
-        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
-        if special_tokens:
-            # 如果是特殊 token, 就全部添加
-            if len(new_tokens) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, new_tokens[0])
+            if str(token) == "":
+                continue
+            if isinstance(token, str):
+                if token in self._added_tokens_encoder:
+                    continue
+                else:
+                    # very important for fast and slow equivalence!
+                    is_special = token in self.all_special_tokens or special_tokens
+                    token = AddedToken(
+                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
+                    )
+            elif special_tokens:
+                # doing token.special=True changes the normalization! will fix in rust
+                # this is important and the only reason why the AddedTokens in each class are normalized by default
+                token.__setstate__({"special": True, "normalized": token.normalized})
+            if token in self._added_tokens_decoder:
+                continue
+            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
+                # Normalize if requested
+                token.content = token.content.lower()
+            if token.content not in current_vocab:
+                token_index = new_idx + added_tokens
+                current_vocab[token.content] = token_index
+                added_tokens += 1
             else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(new_tokens)))
-        else:
-            # 只添加 tokens_to_add 中的, 也就是跳过重复的 token
-            # Or on the newly added tokens
-            if len(tokens_to_add) == 1:
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
-            else:
-                self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
-        # 重新构建 trie 树
-        self._create_trie(self.unique_no_split_tokens)
+                token_index = current_vocab[token.content]
 
-        return len(tokens_to_add)
+            if token.special and str(token) not in self.all_special_tokens:
+                self._additional_special_tokens.append(token)
+            # the setter automatically updates the reverse map
+            self._added_tokens_decoder[token_index] = token
+            self._added_tokens_encoder[token.content] = token_index
+            if self.verbose:
+                logger.info(f"Adding {token} to the vocabulary")
 
-    def _create_trie(self, unique_no_split_tokens):
-        trie = Trie()
+        self._update_trie()
+        return added_tokens
+
+    def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
+        for token in self._added_tokens_decoder.values():
+            if token not in self.tokens_trie._tokens:
+                self.tokens_trie.add(token.content)
         for token in unique_no_split_tokens:
-            if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
-                trie.add(token.lower())
-            else:
-                trie.add(token)
-        self.tokens_trie = trie
+            if token not in self.tokens_trie._tokens:
+                self.tokens_trie.add(token)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
@@ -539,11 +587,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             `List[str]`: The list of tokens.
         """
-        # 特殊 token 中 string => AddedToken 的映射
-        # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
-        all_special_tokens_extended = {
-            str(t): t for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
-        }
         split_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
 
         # 准备工作, 当前这个类没有特殊操作
@@ -553,32 +596,31 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if kwargs:
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
-        # TODO: should this be in the base class?
         if hasattr(self, "do_lower_case") and self.do_lower_case:
-            # convert non-special tokens to lowercase
-            escaped_special_toks = [
-                re.escape(s_tok) for s_tok in (self.unique_no_split_tokens + self.all_special_tokens)
+            # convert non-special tokens to lowercase. Might be super slow as well?
+            escaped_special_toks = [re.escape(s_tok) for s_tok in (self.all_special_tokens)]
+            escaped_special_toks += [
+                re.escape(s_tok.content)
+                for s_tok in (self._added_tokens_decoder.values())
+                if not s_tok.special and s_tok.normalized
             ]
             # .+? 是非贪婪匹配
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             # 没看懂这是什么操作, 据说是将非特殊字符转换成小写的格式
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        # split_special_tokens: empty `no_split_token`
         if split_special_tokens:
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = set(self.unique_no_split_tokens)
-            # 使用 trie 树分割成单词的列表, trie 树只保存新添加的单词
+            no_split_token = self._added_tokens_encoder.keys()  # don't split on any of the added tokens
+            # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
-                # 尝试从特殊字符中获取
-                tok_extended = all_special_tokens_extended.get(token, None)
-                # 当前单词的左边和右边单词
+                tok_extended = self._added_tokens_decoder.get(self._added_tokens_encoder[token], None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 # 如果是特殊字符
@@ -593,13 +635,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     if tok_extended.lstrip and left:
                         # 吃掉了左边单词的右侧空格
                         tokens[i - 1] = left.rstrip()  # Opposite here
+                    if tok_extended.single_word and left and left[-1] != " ":
+                        tokens[i - 1] += token
+                        tokens[i] = ""
+                    elif tok_extended.single_word and right and right[0] != " ":
+                        tokens[i + 1] = token + tokens[i + 1]
+                        tokens[i] = ""
                 else:
-                    # We strip left and right by default
-                    if right:
-                        tokens[i + 1] = right.lstrip()
-                    if left:
-                        tokens[i - 1] = left.rstrip()
-        # 已经去掉空格了
+                    raise ValueError(
+                        f"{tok_extended} cannot be tokenized because it was not properly added"
+                        f" to the tokenizer. This means that it is not an `AddedToken` but a {type(tok_extended)}"
+                    )
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:
@@ -652,10 +698,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if token is None:
             return None
 
-        # 如果在新增的单词中, 就可以直接返回
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
-        # 当然又是未实现的, 在该类中
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -984,8 +1028,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         # 如果是单个 int
         if isinstance(ids, int):
-            if ids in self.added_tokens_decoder:
-                return self.added_tokens_decoder[ids]
+            if ids in self._added_tokens_decoder:
+                return self._added_tokens_decoder[ids].content
             else:
                 return self._convert_id_to_token(ids)
         # 如果是列表
@@ -995,8 +1039,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # 是否跳过特殊 token
             if skip_special_tokens and index in self.all_special_ids:
                 continue
-            if index in self.added_tokens_decoder:
-                tokens.append(self.added_tokens_decoder[index])
+            if index in self._added_tokens_decoder:
+                tokens.append(self._added_tokens_decoder[index].content)
             else:
                 tokens.append(self._convert_id_to_token(index))
         return tokens
@@ -1019,19 +1063,23 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
+        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
+            token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
+        }
         # To avoid mixing byte-level and unicode for byte-level BPT
         # we need to build string separately for added tokens and byte-level tokens
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
+        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_ids:
                 continue
-            if token in self.added_tokens_encoder:
-                # 如果已经有了, 就需要将 current_sub_text 转换成字符串然后添加进去
+            if token in legacy_added_tokens:
                 if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    string = self.convert_tokens_to_string(current_sub_text)
+                    if len(string) > 0:
+                        sub_texts.append(string)
                     current_sub_text = []
                 # 将当前 token 添加进去
                 sub_texts.append(token)
