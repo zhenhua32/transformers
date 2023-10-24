@@ -1089,6 +1089,7 @@ class Pipeline(_ScikitCompat):
             else:
                 batch_size = self._batch_size
 
+        # 先处理参数
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
@@ -1137,12 +1138,14 @@ class Pipeline(_ScikitCompat):
                 )
             )
         else:
+            # 先看单次调用的
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
     def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
         return [self.run_single(item, preprocess_params, forward_params, postprocess_params) for item in inputs]
 
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
+        # 就是三个流程
         model_inputs = self.preprocess(inputs, **preprocess_params)
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)

@@ -229,12 +229,17 @@ class ConversationalPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # 好多大模型都没有定义 pad_token
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def _sanitize_parameters(
         self, min_length_for_response=None, minimum_tokens=None, clean_up_tokenization_spaces=None, **generate_kwargs
     ):
+        """
+        先看下参数预处理
+        """
+        # 定义三组参数
         preprocess_params = {}
         forward_params = {}
         postprocess_params = {}
@@ -244,6 +249,7 @@ class ConversationalPipeline(Pipeline):
         if minimum_tokens is not None:
             forward_params["minimum_tokens"] = minimum_tokens
 
+        # 仅当参数存在时才获取
         if "max_length" in generate_kwargs:
             forward_params["max_length"] = generate_kwargs["max_length"]
             # self.max_length = generate_kwargs.get("max_length", self.model.config.max_length)
@@ -281,12 +287,14 @@ class ConversationalPipeline(Pipeline):
             conversations = Conversation(conversations)
         elif isinstance(conversations, list) and isinstance(conversations[0], list):
             conversations = [Conversation(conv) for conv in conversations]
+        # 调用父类方法. 还是需要提供下 kwargs 参数
         outputs = super().__call__(conversations, num_workers=num_workers, **kwargs)
         if isinstance(outputs, list) and len(outputs) == 1:
             return outputs[0]
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
+        # 应用对话模板
         input_ids = self.tokenizer.apply_chat_template(conversation, add_generation_prompt=True)
 
         if self.framework == "pt":
@@ -296,14 +304,18 @@ class ConversationalPipeline(Pipeline):
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
+        # n 是对话长度
         n = model_inputs["input_ids"].shape[1]
         conversation = model_inputs.pop("conversation")
+        # 填充一个默认的 max_new_tokens 参数
         if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
             generate_kwargs["max_new_tokens"] = 256
+        # 调用模型生成方法
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
         else:
+            # 需要跳过的长度
             start_position = n
         return {"output_ids": output_ids[:, start_position:], "conversation": conversation}
 
@@ -314,6 +326,7 @@ class ConversationalPipeline(Pipeline):
             skip_special_tokens=True,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
+        # 将结果添加到对话中, 并返回
         conversation = model_outputs["conversation"]
         conversation.add_message({"role": "assistant", "content": answer})
         return conversation
