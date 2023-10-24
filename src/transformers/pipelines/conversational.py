@@ -16,6 +16,7 @@ logger = logging.get_logger(__name__)
 
 
 class Conversation:
+    # 定义一个对话类, 包含对话历史.
     """
     Utility class containing a conversation and its history. This class is meant to be used as an input to the
     [`ConversationalPipeline`]. The conversation contains several utility functions to manage the addition of new user
@@ -71,16 +72,20 @@ class Conversation:
             messages = legacy_messages + messages
 
         self.uuid = conversation_id
+        # messages 就是个列表, 每个元素是一个字典, 包含两个键: role 和 content
         self.messages = messages
 
     def __eq__(self, other):
+        # 判断是否是相同的对话
         if not isinstance(other, Conversation):
             return False
         return self.uuid == other.uuid or self.messages == other.messages
 
     def add_message(self, message: Dict[str, str]):
+        # 添加消息, 每个消息只能有两个键: role 和 content
         if not set(message.keys()) == {"role", "content"}:
             raise ValueError("Message should contain only 'role' and 'content' keys!")
+        # 且 role 只能是 user, assistant, system 三者之一
         if message["role"] not in ("user", "assistant", "system"):
             raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
         self.messages.append(message)
@@ -118,6 +123,8 @@ class Conversation:
         processed and unprocessed user input.
         """
         pass
+
+    # 实现各类方式, 模拟列表的行为
 
     def __iter__(self):
         for message in self.messages:
