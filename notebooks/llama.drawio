@@ -1,9 +1,64 @@
-<mxfile host="app.diagrams.net" modified="2023-12-11T12:06:45.519Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0" version="22.1.7" etag="Fz6t38oL6Uu7MXGB5GAb" type="github">
+<mxfile host="app.diagrams.net" modified="2023-12-11T13:01:57.740Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0" etag="C9qULf86xO_Zu_vABG4C" version="22.1.7" type="github">
   <diagram name="第 1 页" id="NNxTGkszWn2__669ob9U">
-    <mxGraphModel>
+    <mxGraphModel dx="2040" dy="785" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="xeBMHJMb5J4GDxteD4Td-1" target="xeBMHJMb5J4GDxteD4Td-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-4" value=".model 属性" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="xeBMHJMb5J4GDxteD4Td-3">
+          <mxGeometry y="1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-1" value="LlamaForCausalLM" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-530" y="160" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="xeBMHJMb5J4GDxteD4Td-2" target="xeBMHJMb5J4GDxteD4Td-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-12" value="堆叠N层" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="xeBMHJMb5J4GDxteD4Td-11">
+          <mxGeometry x="-0.2833" y="-2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xeBMHJMb5J4GDxteD4Td-2" target="xeBMHJMb5J4GDxteD4Td-10">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-580" y="330" />
+              <mxPoint x="-580" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-14" value=".norm属性" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="xeBMHJMb5J4GDxteD4Td-13">
+          <mxGeometry x="0.0262" y="1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-2" value="LlamaModel" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-520" y="300" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xeBMHJMb5J4GDxteD4Td-5" target="xeBMHJMb5J4GDxteD4Td-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-7" value=".model属性" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="xeBMHJMb5J4GDxteD4Td-6">
+          <mxGeometry x="-0.076" y="-2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-5" value="LlamaForSequenceClassification" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-290" y="160" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-8" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-360" y="250" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-9" value="LlamaDecoderLayer" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-520" y="420" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xeBMHJMb5J4GDxteD4Td-10" value="LlamaRMSNorm" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-520" y="550" width="120" height="60" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
