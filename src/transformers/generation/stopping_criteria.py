@@ -35,6 +35,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
 
 
 class StoppingCriteria(ABC):
+    # 停止条件的抽象类
     """Abstract base class for all stopping criteria that can be applied during generation.
 
     If your stopping criteria depends on the `scores` input, make sure you pass `return_dict_in_generate=True,
@@ -43,11 +44,13 @@ class StoppingCriteria(ABC):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        # 应该实现 __call__ 方法, 有两个参数, 返回一个 bool 值表示是否停止
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
 class MaxLengthCriteria(StoppingCriteria):
     """
+    最大长度限制
     This class can be used to stop generation whenever the full generated number of tokens exceeds `max_length`. Keep
     in mind for decoder-only type of transformers, this will include the initial prompted tokens.
 
@@ -64,8 +67,10 @@ class MaxLengthCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        # 判断当前长度是否超过最大长度
         cur_len = input_ids.shape[-1]
         is_done = cur_len >= self.max_length
+        # 当前长度超出模型的最大嵌入长度时会有警告
         if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
             logger.warning_once(
                 "This is a friendly reminder - the current text generation call will exceed the model's predefined "
@@ -77,6 +82,7 @@ class MaxLengthCriteria(StoppingCriteria):
 
 class MaxNewTokensCriteria(StoppingCriteria):
     """
+    最大新 token 长度限制
     This class can be used to stop generation whenever the generated number of tokens exceeds `max_new_tokens`. Keep in
     mind for decoder-only type of transformers, this will **not** include the initial prompted tokens. This is very
     close to `MaxLengthCriteria` but ignores the number of initial tokens.
@@ -97,6 +103,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
         )
         self.start_length = start_length
         self.max_new_tokens = max_new_tokens
+        # 需要在开始的时候提供初始长度
         self.max_length = start_length + max_new_tokens
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
@@ -106,6 +113,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
 
 class MaxTimeCriteria(StoppingCriteria):
     """
+    超时限制
     This class can be used to stop generation whenever the full generation exceeds some amount of time. By default, the
     time will start being counted when you initialize this function. You can override this by passing an
     `initial_time`.
@@ -150,10 +158,12 @@ class StoppingCriteriaList(list):
 
 
 def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int) -> StoppingCriteriaList:
+    """检查最大长度是否一致, 并返回新的停止条件列表"""
     stopping_max_length = stopping_criteria.max_length
     new_stopping_criteria = deepcopy(stopping_criteria)
     if stopping_max_length is not None and stopping_max_length != max_length:
         warnings.warn("You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning)
     elif stopping_max_length is None:
+        # 没有的时候就加进去
         new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
     return new_stopping_criteria
