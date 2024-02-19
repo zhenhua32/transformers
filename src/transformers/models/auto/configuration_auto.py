@@ -77,6 +77,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("decision_transformer", "DecisionTransformerConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
+        ("depth_anything", "DepthAnythingConfig"),
         ("deta", "DetaConfig"),
         ("detr", "DetrConfig"),
         ("dinat", "DinatConfig"),
@@ -94,6 +95,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
         ("falcon", "FalconConfig"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
@@ -145,6 +147,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertConfig"),
         ("mgp-str", "MgpstrConfig"),
         ("mistral", "MistralConfig"),
+        ("mixtral", "MixtralConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
@@ -181,6 +184,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
         ("qdqbert", "QDQBertConfig"),
+        ("qwen2", "Qwen2Config"),
         ("rag", "RagConfig"),
         ("realm", "RealmConfig"),
         ("reformer", "ReformerConfig"),
@@ -199,12 +203,15 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
+        ("siglip", "SiglipConfig"),
+        ("siglip_vision_model", "SiglipVisionConfig"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("speech_to_text", "Speech2TextConfig"),
         ("speech_to_text_2", "Speech2Text2Config"),
         ("speecht5", "SpeechT5Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
+        ("stablelm", "StableLmConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -229,6 +236,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("van", "VanConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
+        ("vipllava", "VipLlavaConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -241,6 +249,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
+        ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
         ("whisper", "WhisperConfig"),
@@ -302,6 +311,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deformable_detr", "DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("depth_anything", "DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deta", "DETA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dinat", "DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -318,6 +328,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("falcon", "FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("fastspeech2_conformer", "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -366,6 +377,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mgp-str", "MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mistral", "MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mixtral", "MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -399,6 +411,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pvt", "PVT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("qwen2", "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -415,11 +428,13 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("siglip", "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text_2", "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speecht5", "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("stablelm", "STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -439,6 +454,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("videomae", "VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vipllava", "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -449,6 +465,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vits", "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("wav2vec2-bert", "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("whisper", "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xclip", "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -520,6 +537,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
+        ("depth_anything", "Depth Anything"),
         ("deta", "DETA"),
         ("detr", "DETR"),
         ("dialogpt", "DialoGPT"),
@@ -539,6 +557,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
         ("falcon", "Falcon"),
+        ("fastspeech2_conformer", "FastSpeech2Conformer"),
         ("flan-t5", "FLAN-T5"),
         ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
@@ -599,6 +618,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
         ("mistral", "Mistral"),
+        ("mixtral", "Mixtral"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
@@ -639,6 +659,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
         ("qdqbert", "QDQBert"),
+        ("qwen2", "Qwen2"),
         ("rag", "RAG"),
         ("realm", "REALM"),
         ("reformer", "Reformer"),
@@ -657,12 +678,15 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
+        ("siglip", "SigLIP"),
+        ("siglip_vision_model", "SiglipVisionModel"),
         ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("speech_to_text", "Speech2Text"),
         ("speech_to_text_2", "Speech2Text2"),
         ("speecht5", "SpeechT5"),
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
+        ("stablelm", "StableLm"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),
@@ -690,6 +714,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("van", "VAN"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
+        ("vipllava", "VipLlava"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("vision-text-dual-encoder", "VisionTextDualEncoder"),
         ("visual_bert", "VisualBERT"),
@@ -702,6 +727,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
+        ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
         ("wavlm", "WavLM"),
@@ -747,6 +773,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
+        ("siglip_vision_model", "siglip"),
     ]
 )
 
@@ -1006,8 +1033,7 @@ class AutoConfig:
                 Can be either:
 
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                      huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                      namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
@@ -1050,7 +1076,7 @@ class AutoConfig:
         >>> from transformers import AutoConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 
         >>> # Download configuration from huggingface.co (user-uploaded) and cache.
         >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
@@ -1062,12 +1088,12 @@ class AutoConfig:
         >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
         >>> # Change some config attributes when loading a pretrained config.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         >>> config.output_attentions
         True
 
         >>> config, unused_kwargs = AutoConfig.from_pretrained(
-        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ...     "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         ... )
         >>> config.output_attentions
         True
@@ -1108,8 +1134,14 @@ class AutoConfig:
                 config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            # 如果不行, 则尝试从 model_type 中获取类
-            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            try:
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            except KeyError:
+                raise ValueError(
+                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
+                    "but Transformers does not recognize this architecture. This could be because of an "
+                    "issue with the checkpoint, or because your version of Transformers is out of date."
+                )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.

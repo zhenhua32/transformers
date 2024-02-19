@@ -951,8 +951,8 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to add a new classification token to GPT-2
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2Model.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2Model.from_pretrained("openai-community/gpt2")
 
         special_tokens_dict = {"cls_token": "<CLS>"}
 
@@ -982,14 +982,15 @@ class SpecialTokensMixin:
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
 
-                to_add = set()
+                to_add = []
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
-                    if str(token) not in self.additional_special_tokens:
-                        to_add.add(token)
-                if replace_additional_special_tokens:
+                    if not replace_additional_special_tokens and str(token) in self.additional_special_tokens:
+                        continue
+                    to_add.append(token)
+                if replace_additional_special_tokens and len(to_add) > 0:
                     setattr(self, key, list(to_add))
                 else:
                     self._additional_special_tokens.extend(to_add)
@@ -1043,8 +1044,8 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
-        model = BertModel.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizerFast.from_pretrained("google-bert/bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
 
         num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
         print("We have added", num_added_toks, "tokens")
@@ -1749,6 +1750,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: bool = False,
         **tokenizer_kwargs,
     ) -> Union[str, List[int]]:
         """
@@ -1782,6 +1784,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
         Returns:
@@ -1810,15 +1814,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
         if tokenize:
-            return self.encode(
-                rendered,
-                add_special_tokens=False,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
+            if return_dict:
+                return self(
+                    rendered,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+            else:
+                return self.encode(
+                    rendered,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
         else:
             return rendered
 
@@ -1874,6 +1889,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
+        trust_remote_code=False,
         **kwargs,
     ):
         r"""
@@ -1885,8 +1901,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Can be either:
 
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                  user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
@@ -1919,6 +1933,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__` method.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the Tokenizer `__init__` method. Can be used to set special tokens like `bos_token`,
                 `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
@@ -1935,7 +1953,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ```python
         # We can't instantiate directly the base class *PreTrainedTokenizerBase* so let's show our examples on a derived class: BertTokenizer
         # Download vocabulary from huggingface.co and cache.
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         # Download vocabulary from huggingface.co (user-uploaded) and cache.
         tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
@@ -1947,7 +1965,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer = BertTokenizer.from_pretrained("./test/saved_model/my_vocab.txt")
 
         # You can link tokens to special vocabulary when instantiating
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", unk_token="<unk>")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", unk_token="<unk>")
         # You should be sure '<unk>' is in the vocabulary when doing that.
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"
@@ -2029,6 +2047,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     local_files_only=local_files_only,
                     subfolder=subfolder,
                     user_agent=user_agent,
+                    _raise_exceptions_for_gated_repo=False,
                     _raise_exceptions_for_missing_entries=False,
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=commit_hash,
@@ -2066,6 +2085,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_gated_repo=False,
                     _raise_exceptions_for_missing_entries=False,
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=commit_hash,
@@ -2108,6 +2128,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             local_files_only=local_files_only,
             _commit_hash=commit_hash,
             _is_local=is_local,
+            trust_remote_code=trust_remote_code,
             **kwargs,
         )
 
@@ -2123,6 +2144,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         local_files_only=False,
         _commit_hash=None,
         _is_local=False,
+        trust_remote_code=False,
         **kwargs,
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -2176,6 +2198,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # 当 config_tokenizer_class 不存在时
         if config_tokenizer_class is None:
+            # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
+            #       If not, it raises a warning, but otherwise continues. Since we mostly load tokenizers with
+            #       AutoTokenizer these days, it seems like a lot of work (and a source of bugs) for little gain.
+            #       Maybe we can just remove this entirely?
             from .models.auto.configuration_auto import AutoConfig  # tests_ignore
 
             # 第二次尝试, 从 模型配置文件 中读取
@@ -2186,6 +2212,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token=token,
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
+                    trust_remote_code=trust_remote_code,
                     _commit_hash=_commit_hash,
                 )
                 config_tokenizer_class = config.tokenizer_class
@@ -2319,7 +2346,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `tokenizer_config.json` is `None`
-            if "Fast" not in cls.__name__ and tokenizer_file is not None:
+            if tokenizer_file is not None:
                 # This is for slow so can be done before
                 with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
                     tokenizer_file_handle = json.load(tokenizer_file_handle)
@@ -2331,14 +2358,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # end legacy
 
         # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
+        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
+        init_kwargs["added_tokens_decoder"] = added_tokens_decoder
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
             if added_tokens_map != {} and init_kwargs[key] is not None:
                 if key != "additional_special_tokens":
-                    init_kwargs[key] = added_tokens_map.get(init_kwargs[key], init_kwargs[key])
+                    init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
 
-        init_kwargs["added_tokens_decoder"] = added_tokens_decoder
-        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # Instantiate the tokenizer.
         try:
             # 这个类 PreTrainedTokenizerBase 本身是没有位置参数 *args 的
@@ -2611,7 +2638,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
         将字符串转换成序列的列表
-        Converts a string in a sequence of tokens, replacing unknown tokens with the `unk_token`.
+        Converts a string into a sequence of tokens, replacing unknown tokens with the `unk_token`.
 
         Args:
             text (`str`):
@@ -2970,13 +2997,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if not _is_valid_text_input(text):
             raise ValueError(
-                "text input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
+                "text input must be of type `str` (single example), `List[str]` (batch or single pretokenized example) "
                 "or `List[List[str]]` (batch of pretokenized examples)."
             )
 
         if text_pair is not None and not _is_valid_text_input(text_pair):
             raise ValueError(
-                "text input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
+                "text input must be of type `str` (single example), `List[str]` (batch or single pretokenized example) "
                 "or `List[List[str]]` (batch of pretokenized examples)."
             )
 
@@ -3718,23 +3745,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "truncation strategy. So the returned list will always be empty even if some "
                 "tokens have been removed."
             )
-            # 循环 num_tokens_to_remove 的长度
-            for _ in range(num_tokens_to_remove):
-                # 当第二个序列没有, 或者第一个序列比第二个序列长, 那么先从第一个序列开始截断
-                if pair_ids is None or len(ids) > len(pair_ids):
-                    if self.truncation_side == "right":
-                        ids = ids[:-1]
-                    elif self.truncation_side == "left":
-                        ids = ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
-                else:
-                    if self.truncation_side == "right":
-                        pair_ids = pair_ids[:-1]
-                    elif self.truncation_side == "left":
-                        pair_ids = pair_ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+            len_pair_ids = len(pair_ids) if pair_ids is not None else 0
+            len_ids = len(ids)
+            first_remove = min(abs(len_pair_ids - len_ids), num_tokens_to_remove)
+            second_remove = num_tokens_to_remove - first_remove
+            if len_ids > len_pair_ids:
+                ids_to_move = first_remove + second_remove // 2
+                pair_ids_to_move = second_remove - second_remove // 2
+            else:
+                ids_to_move = second_remove // 2
+                pair_ids_to_move = first_remove + second_remove - (second_remove // 2)
+
+            if self.truncation_side == "right":
+                ids = ids[:-ids_to_move] if ids_to_move > 0 else ids
+                pair_ids = pair_ids[:-pair_ids_to_move] if pair_ids is not None and pair_ids_to_move > 0 else pair_ids
+            elif self.truncation_side == "left":
+                ids = ids[ids_to_move:]
+                pair_ids = pair_ids[pair_ids_to_move:] if pair_ids is not None else None
+            else:
+                raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             # 这边和截断第一个序列时没什么差别, 只是把第二个序列截断
             if len(pair_ids) > num_tokens_to_remove:

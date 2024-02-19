@@ -92,7 +92,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -363,20 +363,15 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
         attn_dropout = self.attn_pdrop if self.training else 0.0
 
-        softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else query.dtype
-        upcast = query.dtype != softmax_dtype
-        softmax_scale = self.layer_idx + 1 if self.scale_attention_softmax_in_fp32 and upcast else 1
-        softmax_scale = softmax_scale**-1
-        if self.scale_attn_weights:
-            softmax_scale /= self.head_dim**0.5
-
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.c_attn.weight.dtype
@@ -391,7 +386,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             value = value.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
+            query, key, value, attention_mask, query_length, dropout=attn_dropout
         )
 
         attn_weights_reshaped = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -532,23 +527,36 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
         if self.multi_query:
             query_length = query_shape[1]
 
-            # NOTE: Maybe there is better than this?
+            # SDPA requires the dimension [..., sequence_length, head_dim].
             query = query.view(batch_size, query_length, self.num_heads, self.head_dim).transpose(1, 2)
 
             # Without these unsqueeze, SDPA complains as the query and key/value have a different number of dimensions.
             key = key.unsqueeze(1)
             value = value.unsqueeze(1)
 
-            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to mem-efficient attention
-            # and flash attention (No available kernel.  Aborting execution.) from the shapes
+            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to memory-efficient backend
+            # and flash attention backend (No available kernel.  Aborting execution.) from the shapes
             # query = [batch_size, num_heads, query_length, head_dim]
             # key = [batch_size, 1, past_length, head_dim]
             # value = [batch_size, 1, past_length, head_dim]
-            # which is unfortunate. Hopefully can be improved in the future. These expand should not be too expansive as they do not do memory copy.
-            key = key.expand(-1, self.num_heads, -1, -1)
-            value = value.expand(-1, self.num_heads, -1, -1)
+            #
+            # so we could do:
+            #
+            # key = key.expand(-1, self.num_heads, -1, -1)
+            # value = value.expand(-1, self.num_heads, -1, -1)
+            #
+            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+            # so we always dispatch to the math path: https://github.com/pytorch/pytorch/issues/112577.
+            # Arguably we could still do expand + contiguous when `query.device.type == "cuda"` in order to dispatch on memory-efficient
+            # backend, but it feels very hacky.
         else:
             query_length = query_shape[-1]
+
+            # See the comment above.
+            if query.device.type == "cuda" and attention_mask is not None:
+                query = query.contiguous()
+                key = key.contiguous()
+                value = value.contiguous()
 
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
@@ -1369,9 +1377,10 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

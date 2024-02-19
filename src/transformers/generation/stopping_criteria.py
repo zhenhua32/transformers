@@ -134,7 +134,7 @@ class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         # 有任一条件满足就返回 True
-        return any(criteria(input_ids, scores) for criteria in self)
+        return any(criteria(input_ids, scores, **kwargs) for criteria in self)
 
     @property
     def max_length(self) -> Optional[int]:
