@@ -75,7 +75,7 @@ class TextStreamer(BaseStreamer):
         self.decode_kwargs = decode_kwargs
 
         # variables used in the streaming process
-        self.token_cache = []
+        self.token_cache = []  # 保存历史的 token
         self.print_len = 0
         self.next_tokens_are_prompt = True
 
@@ -87,27 +87,32 @@ class TextStreamer(BaseStreamer):
             raise ValueError("TextStreamer only supports batch size 1")
         elif len(value.shape) > 1:
             value = value[0]
+        # value 应该是 token 的列表
 
         if self.skip_prompt and self.next_tokens_are_prompt:
             self.next_tokens_are_prompt = False
             return
 
+        # 直接加入并尝试解码, 也就是这里是拼起来解码的
         # Add the new token to the cache and decodes the entire thing.
         self.token_cache.extend(value.tolist())
         text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
 
         # After the symbol for a new line, we flush the cache.
         if text.endswith("\n"):
+            # 遇到换行直接重置
             printable_text = text[self.print_len :]
-            self.token_cache = []
+            self.token_cache = []  # 换行的时候会重置
             self.print_len = 0
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+            # 最后一个是中文字符，直接打印
             printable_text = text[self.print_len :]
-            self.print_len += len(printable_text)
+            self.print_len += len(printable_text)  # 记录当前打印的长度
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
+            # 在遇到最后一个空格后打印
             printable_text = text[self.print_len : text.rfind(" ") + 1]
             self.print_len += len(printable_text)
 
