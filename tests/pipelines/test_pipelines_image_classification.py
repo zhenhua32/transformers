@@ -14,14 +14,18 @@
 
 import unittest
 
+from huggingface_hub import ImageClassificationOutputElement
+
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
+    is_torch_available,
     is_vision_available,
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -33,6 +37,9 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -51,8 +58,24 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        image_classifier = ImageClassificationPipeline(model=model, image_processor=processor, top_k=2)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        image_classifier = ImageClassificationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+            top_k=2,
+        )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
@@ -115,6 +138,10 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
+        for single_output in outputs:
+            for output_element in single_output:
+                compare_pipeline_output_to_hub_spec(output_element, ImageClassificationOutputElement)
+
     @require_torch
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-vit"
@@ -176,6 +203,30 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
         self.assertIs(image_classifier.tokenizer, tokenizer)
+
+    @require_torch
+    def test_torch_float16_pipeline(self):
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
+        )
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=3),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
+
+    @require_torch
+    def test_torch_bfloat16_pipeline(self):
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
+        )
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=3),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
 
     @slow
     @require_torch

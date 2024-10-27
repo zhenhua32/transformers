@@ -20,6 +20,12 @@ rendered properly in your Markdown viewer.
 
 The Depth Anything model was proposed in [Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data](https://arxiv.org/abs/2401.10891) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. Depth Anything is based on the [DPT](dpt) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
 
+<Tip>
+
+[Depth Anything V2](depth_anything_v2) was released in June 2024. It uses the same architecture as Depth Anything and therefore it is compatible with all code examples and existing workflows. However, it leverages synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
+
+</Tip>
+
 The abstract from the paper is the following:
 
 *This work presents Depth Anything, a highly practical solution for robust monocular depth estimation. Without pursuing novel technical modules, we aim to build a simple yet powerful foundation model dealing with any images under any circumstances. To this end, we scale up the dataset by designing a data engine to collect and automatically annotate large-scale unlabeled data (~62M), which significantly enlarges the data coverage and thus is able to reduce the generalization error. We investigate two simple yet effective strategies that make data scaling-up promising. First, a more challenging optimization target is created by leveraging data augmentation tools. It compels the model to actively seek extra visual knowledge and acquire robust representations. Second, an auxiliary supervision is developed to enforce the model to inherit rich semantic priors from pre-trained encoders. We evaluate its zero-shot capabilities extensively, including six public datasets and randomly captured photos. It demonstrates impressive generalization ability. Further, through fine-tuning it with metric depth information from NYUv2 and KITTI, new SOTAs are set. Our better depth model also results in a better depth-conditioned ControlNet.*
@@ -78,21 +84,27 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
-...     predicted_depth = outputs.predicted_depth
 
->>> # interpolate to original size
->>> prediction = torch.nn.functional.interpolate(
-...     predicted_depth.unsqueeze(1),
-...     size=image.size[::-1],
-...     mode="bicubic",
-...     align_corners=False,
+>>> # interpolate to original size and visualize the prediction
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     target_sizes=[(image.height, image.width)],
 ... )
 
->>> # visualize the prediction
->>> output = prediction.squeeze().cpu().numpy()
->>> formatted = (output * 255 / np.max(output)).astype("uint8")
->>> depth = Image.fromarray(formatted)
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
+>>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+>>> depth = depth.detach().cpu().numpy() * 255
+>>> depth = Image.fromarray(depth.astype("uint8"))
 ```
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
+
+- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
+- A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## DepthAnythingConfig
 

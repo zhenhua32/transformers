@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
+    "configuration_qwen2": ["Qwen2Config"],
     "tokenization_qwen2": ["Qwen2Tokenizer"],
 }
 
@@ -42,14 +42,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_qwen2"] = [
         "Qwen2ForCausalLM",
+        "Qwen2ForQuestionAnswering",
         "Qwen2Model",
         "Qwen2PreTrainedModel",
         "Qwen2ForSequenceClassification",
+        "Qwen2ForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
+    from .configuration_qwen2 import Qwen2Config
     from .tokenization_qwen2 import Qwen2Tokenizer
 
     try:
@@ -68,7 +70,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_qwen2 import (
             Qwen2ForCausalLM,
+            Qwen2ForQuestionAnswering,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )

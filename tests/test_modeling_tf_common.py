@@ -380,7 +380,9 @@ class TFModelTesterMixin:
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype)
+                for name, tensor in inputs_dict.items()
+                if tf.is_tensor(tensor)
             }
 
             model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
@@ -1689,7 +1691,11 @@ class TFModelTesterMixin:
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 if "labels" not in tf_inputs_dict:
                     return  # This model isn't giving us labels after all, don't try training with it
-                tf_inputs_dict = {key: val for key, val in tf_inputs_dict.items() if "head_mask" not in key}
+                tf_inputs_dict = {
+                    key: val
+                    for key, val in tf_inputs_dict.items()
+                    if "head_mask" not in key and isinstance(val, tf.Tensor)
+                }
                 tf_inputs_dict["extra_unwanted_column"] = list(tf_inputs_dict.values())[0]  # Use a random other tensor
                 input_dataset = Dataset.from_dict(tf_inputs_dict)
                 tf_dataset = model.prepare_tf_dataset(
@@ -1709,10 +1715,9 @@ class TFModelTesterMixin:
                 model.train_on_batch(test_batch, test_batch_labels)
 
     def _test_xla_generate(self, **generate_kwargs):
-        def _generate_and_check_results(model, inputs_dict):
-            if "input_ids" in inputs_dict:
-                inputs = inputs_dict["input_ids"]
-                # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
+        def _generate_and_check_results(model, inputs, is_input_ids):
+            # make sure there are no pad tokens in prompt, which may trigger unwanted behavior
+            if is_input_ids:
                 if model.generation_config.pad_token_id is not None:
                     if config.pad_token_id == 0:
                         new_pad_token = model.generation_config.pad_token_id + 1
@@ -1721,10 +1726,6 @@ class TFModelTesterMixin:
                 else:
                     new_pad_token = None
                 inputs = tf.where(inputs != model.generation_config.pad_token_id, inputs, new_pad_token)
-            elif "input_features" in inputs_dict:
-                inputs = inputs_dict["input_features"]
-            else:
-                raise ValueError("No valid generate input found in inputs_dict")
 
             generated = model.generate(inputs, **generate_kwargs).numpy()
             generate_xla = tf.function(model.generate, jit_compile=True)
@@ -1747,12 +1748,20 @@ class TFModelTesterMixin:
             config.eos_token_id = None  # Generate until max length
             config.do_sample = False
 
+            # extract the input to the model
+            is_input_ids = "input_ids" in inputs_dict
+            is_input_features = "input_features" in inputs_dict
+            if not (is_input_ids or is_input_features):
+                raise ValueError("No valid generate input found in inputs_dict")
+            inputs = inputs_dict["input_ids"] if is_input_ids else inputs_dict["input_features"]
+
             # fix config for models with additional sequence-length limiting settings
+            seq_len = inputs.get_shape()[1]
             for var_name in ["max_position_embeddings", "max_target_positions"]:
                 attr = getattr(config, var_name, None)
-                if attr is not None and attr < generate_kwargs["max_new_tokens"]:
+                if attr is not None and attr < seq_len + generate_kwargs["max_new_tokens"]:
                     try:
-                        setattr(config, var_name, generate_kwargs["max_new_tokens"])
+                        setattr(config, var_name, seq_len + generate_kwargs["max_new_tokens"])
                     except NotImplementedError:
                         # xlnet will raise an exception when trying to set
                         # max_position_embeddings.
@@ -1761,10 +1770,10 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             if model.supports_xla_generation:
-                _generate_and_check_results(model, inputs_dict)
+                _generate_and_check_results(model, inputs, is_input_ids)
             else:
                 with self.assertRaises(ValueError):
-                    _generate_and_check_results(model, inputs_dict)
+                    _generate_and_check_results(model, inputs, is_input_ids)
 
     def test_xla_generate_fast(self):
         """
@@ -1853,8 +1862,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
 
 def random_attention_mask(shape, rng=None, name=None, dtype=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
-    # make sure that at least one token is attended to for each batch
-    attn_mask = tf.concat([attn_mask[:, :-1], tf.ones_like(attn_mask[:, -1:], dtype=dtype)], axis=-1)
+    # Mark the first token as 1 (matches behaviour of PyTorch/Flax function)
+    attn_mask = tf.concat([tf.ones_like(attn_mask[:, :1]), attn_mask[:, 1:]], axis=1)
     return attn_mask
 
 

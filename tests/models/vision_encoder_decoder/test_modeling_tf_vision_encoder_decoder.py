@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow VisionEncoderDecoder model. """
-
+"""Testing suite for the TensorFlow VisionEncoderDecoder model."""
 
 from __future__ import annotations
 
@@ -308,6 +307,8 @@ class TFVisionEncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
@@ -490,7 +491,9 @@ class TFVisionEncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             tf_model.save_pretrained(tmpdirname, safe_serialization=False)
-            pt_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
+            pt_model = VisionEncoderDecoderModel.from_pretrained(
+                tmpdirname, from_tf=True, attn_implementation=tf_model.config._attn_implementation
+            )
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 

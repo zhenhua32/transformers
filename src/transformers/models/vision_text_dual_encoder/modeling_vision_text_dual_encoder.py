@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VisionTextDualEncoder model."""
-
+"""PyTorch VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple, Union
 
@@ -162,6 +161,8 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -195,6 +196,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.vision_config._attn_implementation = self.vision_model.config._attn_implementation
+        self.config.text_config._attn_implementation = self.text_model.config._attn_implementation
         self.vision_model.config = self.config.vision_config
         self.text_model.config = self.config.text_config
 

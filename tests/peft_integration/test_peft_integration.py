@@ -12,14 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import os
 import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
+from packaging import version
 
 from transformers import AutoModelForCausalLM, OPTForCausalLM
-from transformers.testing_utils import require_peft, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_peft,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 
@@ -335,6 +344,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.save_pretrained(tmpdirname)
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_from_pretrained_kwargs(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained` + additional kwargs
@@ -352,6 +362,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_save_quantized(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
@@ -390,6 +401,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_save_quantized_regression(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
@@ -467,6 +479,48 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # dummy generation
                 _ = model.generate(input_ids=dummy_input)
+
+    def test_peft_add_adapter_with_state_dict_low_cpu_mem_usage(self):
+        """
+        Check the usage of low_cpu_mem_usage, which is supported in PEFT >= 0.13.0
+        """
+        from peft import LoraConfig
+
+        min_version_lcmu = "0.13.0"
+        is_lcmu_supported = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu)
+
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
+                dummy_state_dict = torch.load(state_dict_path)
+
+                # this should always work
+                model.load_adapter(
+                    adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
+                )
+
+                if is_lcmu_supported:
+                    # if supported, this should not raise an error
+                    model.load_adapter(
+                        adapter_state_dict=dummy_state_dict,
+                        adapter_name="other",
+                        peft_config=peft_config,
+                        low_cpu_mem_usage=True,
+                    )
+                    # after loading, no meta device should be remaining
+                    self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
+                else:
+                    err_msg = r"The version of PEFT you are using does not support `low_cpu_mem_usage` yet"
+                    with self.assertRaisesRegex(ValueError, err_msg):
+                        model.load_adapter(
+                            adapter_state_dict=dummy_state_dict,
+                            adapter_name="other",
+                            peft_config=peft_config,
+                            low_cpu_mem_usage=True,
+                        )
 
     def test_peft_from_pretrained_hub_kwargs(self):
         """

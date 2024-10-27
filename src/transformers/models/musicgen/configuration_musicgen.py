@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MusicGen model configuration"""
+"""MusicGen model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,11 +20,6 @@ from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
-
-MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-small": "https://huggingface.co/facebook/musicgen-small/resolve/main/config.json",
-    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
-}
 
 
 class MusicgenDecoderConfig(PretrainedConfig):

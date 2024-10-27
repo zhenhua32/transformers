@@ -212,7 +212,7 @@ En este punto, solo quedan tres pasos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -225,7 +225,7 @@ En este punto, solo quedan tres pasos:
 ...     args=training_args,
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
 ... )
 

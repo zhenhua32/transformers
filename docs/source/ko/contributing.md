@@ -99,7 +99,7 @@ python src/transformers/commands/transformers_cli.py env
 
 만약 모델을 직접 기여하고 싶으시다면, 알려주세요. 🤗 Transformers에 추가할 수 있도록 도와드리겠습니다!
 
-새로운 모델을 추가하는 방법에 대한 [상세 안내서와 템플릿](https://github.com/huggingface/transformers/tree/main/templates)을 제공하고 있으며, [🤗 Transformers에 새로운 모델을 추가하는 방법](https://huggingface.co/docs/transformers/add_new_model)에 대한 기술적인 안내서도 있습니다.
+[🤗 Transformers에 새로운 모델을 추가하는 방법](https://huggingface.co/docs/transformers/add_new_model)에 대한 기술적인 안내서도 있습니다.
 
 ## 문서를 추가하고 싶으신가요? [[do-you-want-to-add-documentation]]
 
@@ -113,7 +113,7 @@ python src/transformers/commands/transformers_cli.py env
 
 🤗 Transformers에 기여하기 위해서는 기본적인 `git` 사용 능력이 필요합니다. `git`은 사용하기 쉬운 도구는 아니지만, 매우 훌륭한 매뉴얼을 제공합니다. 쉘(shell)에서 `git --help`을 입력하여 확인해보세요! 만약 책을 선호한다면, [Pro Git](https://git-scm.com/book/en/v2)은 매우 좋은 참고 자료가 될 것입니다.
 
-🤗 Transformers에 기여하려면 **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** 이상의 버전이 필요합니다. 기여를 시작하려면 다음 단계를 따르세요:
+🤗 Transformers에 기여하려면 **[Python 3.9](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** 이상의 버전이 필요합니다. 기여를 시작하려면 다음 단계를 따르세요:
 
 1. 저장소 페이지에서 **[Fork](https://github.com/huggingface/transformers/fork)** 버튼을 클릭하여 저장소를 포크하세요. 이렇게 하면 코드의 복사본이 여러분의 GitHub 사용자 계정 아래에 생성됩니다.
 

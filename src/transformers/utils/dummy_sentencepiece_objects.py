@@ -76,7 +76,21 @@ class ErnieMTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class XLMProphetNetTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class FNetTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class GemmaTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
@@ -118,14 +132,14 @@ class MarianTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class MBart50Tokenizer(metaclass=DummyObject):
+class MBartTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
 
-class MBartTokenizer(metaclass=DummyObject):
+class MBart50Tokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
@@ -216,14 +230,14 @@ class T5Tokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class XGLMTokenizer(metaclass=DummyObject):
+class UdopTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
 
-class XLMProphetNetTokenizer(metaclass=DummyObject):
+class XGLMTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SAM."""
+
 import math
 from copy import deepcopy
 from itertools import product
@@ -34,9 +35,11 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
+    filter_out_non_signature_kwargs,
     is_tf_available,
     is_torch_available,
     is_torchvision_available,
@@ -386,6 +389,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         return segmentation_map, original_size
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -406,7 +410,6 @@ class SamImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -504,18 +507,18 @@ class SamImageProcessor(BaseImageProcessor):
                     "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
                     "torch.Tensor, tf.Tensor or jax.ndarray."
                 )
-
-        if do_resize and (size is None or resample is None):
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
-        if do_pad and pad_size is None:
-            raise ValueError("Pad size must be specified if do_pad is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # Here _preprocess needs do_pad and pad_size.
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         images, original_sizes, reshaped_input_sizes = zip(
             *(

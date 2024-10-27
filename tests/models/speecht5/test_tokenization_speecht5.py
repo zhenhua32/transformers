@@ -30,6 +30,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 @require_sentencepiece
 @require_tokenizers
 class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/speecht5_asr"
     tokenizer_class = SpeechT5Tokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
@@ -142,9 +143,11 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
+    @unittest.skip
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
+    @unittest.skip
     def test_subword_regularization_tokenizer(self):
         pass
 

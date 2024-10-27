@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/roberta-base"
     tokenizer_class = RobertaTokenizer
     rust_tokenizer_class = RobertaTokenizerFast
     test_rust_tokenizer = True
@@ -163,6 +164,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
         self.assertNotEqual(first_char, space_encoding)
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class."""
-
+"""Auto Model class."""
 
 from collections import OrderedDict
 
@@ -37,8 +36,10 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("bloom", "FlaxBloomModel"),
         ("clip", "FlaxCLIPModel"),
+        ("dinov2", "FlaxDinov2Model"),
         ("distilbert", "FlaxDistilBertModel"),
         ("electra", "FlaxElectraModel"),
+        ("gemma", "FlaxGemmaModel"),
         ("gpt-sw3", "FlaxGPT2Model"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
@@ -124,6 +125,7 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("beit", "FlaxBeitForImageClassification"),
+        ("dinov2", "FlaxDinov2ForImageClassification"),
         ("regnet", "FlaxRegNetForImageClassification"),
         ("resnet", "FlaxResNetForImageClassification"),
         ("vit", "FlaxViTForImageClassification"),
@@ -144,6 +146,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForCausalLM"),
         ("bloom", "FlaxBloomForCausalLM"),
         ("electra", "FlaxElectraForCausalLM"),
+        ("gemma", "FlaxGemmaForCausalLM"),
         ("gpt-sw3", "FlaxGPT2LMHeadModel"),
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),

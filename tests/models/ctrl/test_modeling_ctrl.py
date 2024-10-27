@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
@@ -212,9 +211,16 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
             # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
             # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
             # config could not be created.
@@ -245,13 +251,9 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CTRLModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
+        model_name = "Salesforce/ctrl"
+        model = CTRLModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

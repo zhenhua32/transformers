@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViLT model."""
+"""PyTorch ViLT model."""
 
 import collections.abc
 import math
@@ -47,11 +47,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
-
-VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dandelin/vilt-b32-mlm",
-    # See all ViLT models at https://huggingface.co/models?filter=vilt
-]
 
 
 @dataclass
@@ -1231,6 +1226,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported.")
+
         outputs = self.vilt(
             input_ids,
             attention_mask=attention_mask,
@@ -1248,12 +1247,6 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         pooler_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.rank_output(pooler_output)
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable PP
-            labels = labels.to(logits.device)
-            raise NotImplementedError("Training is not yet supported.")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
